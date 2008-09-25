@@ -221,12 +221,75 @@ error:
         EWARNING(err, "failed to send error reply");
 }
 
+void hello_open (fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi) {
+    int err = 0;
+
+    INFO("[hello.open] ino=%lu, fi=%p, fi->flags=%08X", ino, fi, fi->flags);
+
+    if (ino != 2) {
+        // must open our only file, not the dir
+        fuse_reply_err(req, ino == 1 ? EISDIR : ENOENT);
+        return;
+
+    } else if ((fi->flags & 0x03) != O_RDONLY) {
+        // "permission denied"
+        fuse_reply_err(req, EACCES);
+        return;
+    }
+
+    // XXX: update fi stuff?
+
+    // open it!
+    if ((err = fuse_reply_open(req, fi)))
+        EERROR(err, "fuse_reply_open");
+
+    // success
+    return;
+
+error:
+    if ((err = fuse_reply_err(req, err ? err : EIO)))
+        EWARNING(err, "failed to send error reply");
+}
+
+void hello_read (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi) {
+    int err = 0;
+
+    // fi is unused
+    (void) fi;
+
+    INFO("[hello.read] ino=%lu, size=%zu, off=%zu, fi=%p", ino, size, off, fi);
+
+    if (ino != 2) {
+        // EEK!
+        FATAL("wrong inode");
+    }
+    
+    // validate off
+    if (off >= strlen(file_data) && (err = EIO))
+        ERROR("offset is out-of-bounds (%zu >= %zu)", off, strlen(file_data));
+
+    // reply
+    if ((err = fuse_reply_buf(req, file_data + off, MIN(strlen(file_data) - off, size))))
+        PERROR("fuse_reply_buf");
+    
+    // success
+    return;
+
+error:
+    if ((err = fuse_reply_err(req, err ? err : EIO)))
+        EWARNING(err, "failed to send error reply");
+}
+
 struct fuse_lowlevel_ops hello_llops = {
     .init = &hello_init,
     .destroy = &hello_destroy,
 
     .lookup = &hello_lookup,
     .getattr = &hello_getattr,
+
+    .open = &hello_open,
+
+    .read = &hello_read,
 
     .readdir = &hello_readdir,
 };
