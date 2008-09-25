@@ -15,7 +15,7 @@ static void _generic_err_vargs (int use_stderr, const char *func, int perr, cons
     vfprintf(stream, fmt, va);
     
     if (perr)
-        fprintf(stream, ": %s\n", strerror(errno));
+        fprintf(stream, ": %s\n", strerror(perr > 0 ? errno : -perr));
 
     fprintf(stream, "\n");
 }

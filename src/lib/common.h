@@ -32,14 +32,20 @@ extern enum _debug_level _cur_debug_level;
 #define err_func_exit(func, ...)    _generic_err_exit(  1,  func,   0,  __VA_ARGS__ )
 #define perr_func(func, ...)        _generic_err(       1,  func,   1,  __VA_ARGS__ )
 #define perr_func_exit(func, ...)   _generic_err_exit(  1,  func,   1,  __VA_ARGS__ )
+#define eerr_func(func, err, ...)   _generic_err(       1,  func,   err,__VA_ARGS__ )
 
-// error(func + colon + msg, ...) + goto error
+/*
+ * error(func + colon + msg, ...) + goto error
+ * err = negative error code
+ */
 #define ERROR(...) do { err_func(__func__, __VA_ARGS__); goto error; } while (0)
 #define PERROR(...) do { perr_func(__func__, __VA_ARGS__); goto error; } while (0)
+#define EERROR(err, ...) do { eerr_func(__func__, (err), __VA_ARGS__); goto error; } while (0)
 #define FATAL(...) err_func_exit(__func__, __VA_ARGS__)
 #define PFATAL(...) perr_func_exit(__func__, __VA_ARGS__)
 #define WARNING(...) err_func(__func__, __VA_ARGS__)
 #define PWARNING(...) perr_func(__func__, __VA_ARGS__)
+#define EWARNING(err, ...) eerr_func(__func__, (err), __VA_ARGS__)
 
 #ifdef DEBUG_ENABLED
 #define DEBUG(...) err_func(__func__, __VA_ARGS__)
