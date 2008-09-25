@@ -1,5 +1,10 @@
 
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
+
 #include "evfuse.h"
+#include "lib/common.h"
 
 struct evfuse {
     // the /dev/fuse fd/channel that we get from fuse_mount
@@ -20,7 +25,7 @@ struct evfuse {
 
 static void _evfuse_ev_read (evutil_socket_t fd, short what, void *arg) {
     struct evfuse *ctx = arg;
-    struct fuse_chan *ch = ctx->ch;
+    struct fuse_chan *ch = ctx->chan;
     int res;
     
     // loop until we complete a recv
@@ -36,6 +41,8 @@ static void _evfuse_ev_read (evutil_socket_t fd, short what, void *arg) {
         ERROR("fuse_chan_recv failed: %s", strerror(-res));
     
     if (res > 0) {
+        INFO("[evfuse] got %d bytes from /dev/fuse", res);
+
         // received a fuse_req, so process it
         fuse_session_process(ctx->session, ctx->recv_buf, res, ch);
     }
@@ -58,7 +65,7 @@ struct evfuse *evfuse_new (struct event_base *evbase, struct fuse_args *args, st
     int multithreaded, foreground;
     
     // allocate our context
-    if ((ctx = calloc(1, sizeof(*evfuse))) == NULL)
+    if ((ctx = calloc(1, sizeof(*ctx))) == NULL)
         ERROR("calloc");
 
     // parse the commandline for the mountpoint
@@ -92,7 +99,7 @@ struct evfuse *evfuse_new (struct event_base *evbase, struct fuse_args *args, st
         PERROR("event_add");
 
     // and then we wait
-    return evfuse;
+    return ctx;
 
 error:
     free(ctx);

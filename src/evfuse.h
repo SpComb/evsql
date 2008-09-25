@@ -1,8 +1,10 @@
 #ifndef EVFUSE_H
 #define EVFUSE_H
 
+#define FUSE_USE_VERSION 26
+
 #include <event2/event.h>
-#include <fuse_lowlevel.h>
+#include <fuse/fuse_lowlevel.h>
 
 /*
  * A wrapper for the fuse + libevent context
@@ -14,4 +16,4 @@ struct evfuse;
  */
 struct evfuse *evfuse_new (struct event_base *evbase, struct fuse_args *args, struct fuse_lowlevel_ops *llops, void *cb_data);
 
-#ENDIf /* EVFUSE_H */
+#endif /* EVFUSE_H */

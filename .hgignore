@@ -1,0 +1,5 @@
+type: re
+
+^bin/
+^obj/
+\.[^/]+.sw[op]$
