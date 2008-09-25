@@ -7,6 +7,9 @@
 #include "lib/common.h"
 
 struct evfuse {
+    // our mountpoint
+    char *mountpoint;
+
     // the /dev/fuse fd/channel that we get from fuse_mount
     struct fuse_chan *chan;
 
@@ -61,7 +64,6 @@ error:
 
 struct evfuse *evfuse_new (struct event_base *evbase, struct fuse_args *args, struct fuse_lowlevel_ops *llops, void *cb_data) {
     struct evfuse *ctx = NULL;
-    char *mountpoint;
     int multithreaded, foreground;
     
     // allocate our context
@@ -69,11 +71,11 @@ struct evfuse *evfuse_new (struct event_base *evbase, struct fuse_args *args, st
         ERROR("calloc");
 
     // parse the commandline for the mountpoint
-    if (fuse_parse_cmdline(args, &mountpoint, &multithreaded, &foreground) == -1)
+    if (fuse_parse_cmdline(args, &ctx->mountpoint, &multithreaded, &foreground) == -1)
         ERROR("fuse_parse_cmdline");
 
     // mount it
-    if ((ctx->chan = fuse_mount(mountpoint, args)) == NULL)
+    if ((ctx->chan = fuse_mount(ctx->mountpoint, args)) == NULL)
         PERROR("fuse_mount_common");
 
     // the receive buffer stufff
@@ -106,3 +108,24 @@ error:
 
     return NULL;
 }
+
+void evfuse_close (struct evfuse *ctx) {
+    // remove our event
+    if (event_del(ctx->ev))
+        PWARNING("event_del");
+
+    // remove the chan
+    fuse_session_remove_chan(ctx->chan);
+    
+    // destroy the session
+    fuse_session_destroy(ctx->session);
+
+    // unmount
+    fuse_unmount(ctx->mountpoint, ctx->chan);
+    
+    // free
+    free(ctx->recv_buf);
+    free(ctx->mountpoint);
+    free(ctx);
+}
+

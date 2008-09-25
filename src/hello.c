@@ -7,6 +7,7 @@
 
 #include "lib/common.h"
 #include "lib/math.h"
+#include "lib/signals.h"
 #include "evfuse.h"
 
 const char *file_name = "hello";
@@ -14,6 +15,8 @@ const char *file_data = "Hello World\n";
 
 static struct hello {
     struct event_base *ev_base;
+
+    struct signals *signals;
 
     struct evfuse *ev_fuse;
 
@@ -231,22 +234,41 @@ struct fuse_lowlevel_ops hello_llops = {
 
 int main (int argc, char **argv) {
     struct fuse_args fuse_args = FUSE_ARGS_INIT(argc, argv);
+    
+    // zero
+    memset(&ctx, 0, sizeof(ctx));
 
     // init libevent
     if ((ctx.ev_base = event_base_new()) == NULL)
-        FATAL("event_base_new");
+        ERROR("event_base_new");
     
+    // setup signals
+    if ((ctx.signals = signals_default(ctx.ev_base)) == NULL)
+        ERROR("signals_default");
+
     // open fuse
     if ((ctx.ev_fuse = evfuse_new(ctx.ev_base, &fuse_args, &hello_llops, &ctx)) == NULL)
-        FATAL("evfuse_new");
+        ERROR("evfuse_new");
 
     // run libevent
     INFO("running libevent loop");
 
     if (event_base_dispatch(ctx.ev_base))
-        PWARNING("event_base_dispatch");
+        PERROR("event_base_dispatch");
+    
+    // clean shutdown
 
+error :
     // cleanup
-    event_base_free(ctx.ev_base);
+    if (ctx.ev_fuse)
+        evfuse_close(ctx.ev_fuse);
+    
+    if (ctx.signals)
+        signals_free(ctx.signals);
+
+    if (ctx.ev_base)
+        event_base_free(ctx.ev_base);
+    
+    fuse_opt_free_args(&fuse_args);
 }
 

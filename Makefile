@@ -12,7 +12,7 @@ MY_CFLAGS = -Wall -g -std=gnu99
 BIN_NAMES = hello helloworld
 
 bin/helloworld: 
-bin/hello: obj/evfuse.o obj/lib/common.o
+bin/hello: obj/evfuse.o obj/lib/common.o obj/lib/signals.o
 
 # computed
 LDFLAGS = ${LIBRARY_PATHS} ${LIBRARY_LIST}
