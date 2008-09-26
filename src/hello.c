@@ -89,8 +89,8 @@ struct dirbuf {
 
 #define DIRBUF_INITIAL_SIZE 1024
 
-static int dirbuf_init (struct dirbuf *buf) {
-    buf->len = DIRBUF_INITIAL_SIZE;
+static int dirbuf_init (struct dirbuf *buf, size_t req_size) {
+    buf->len = req_size;
     buf->off = 0;
     
     // allocate the mem
@@ -105,69 +105,32 @@ error:
 }
 
 /*
- * Ensure that `new` bytes fit into the buf. If they already fit, update offset and set *retry = 0. If they don't fit,
- * grow buf and set *retry = 1.
- *
- * Returns 0 on success, -1 on failure (don't retry).
+ * Add an ent to the dirbuf. This will assume that the dirbuf is not already full
+ * Returns 0 if the ent was added or skipped, -1 on error, 1 if the dirbuf is full
  */
-static int dirbuf_update (struct dirbuf *buf, size_t new, int *retry) {
-    if (buf->off + new <= buf->len) {
-        INFO("\thello.dirbuf_update: update offset by %zu from %zu -> %zu", new, buf->off, buf->off + new);
-
-        // great, it fit, update offset and return
-        buf->off += new;
-
-        *retry = 0;
-
-    } else {
-        size_t old_len = buf->len;
-
-        // calc new size
-        do {
-            buf->len *= 2;
-
-        } while (buf->off + new > buf->len);
-
-        INFO("\thello.dirbuf_update: grow size for %zu from %zu -> %zu", new, old_len, buf->len);
-        
-        // realloc
-        if ((buf->buf = realloc(buf->buf, buf->len)) == NULL)
-            ERROR("realloc");
-
-        // done, just retry
-        *retry = 1;
-    }
-    
-    // success
-    return 0;
-
-error:
-    return -1;
-}
-
 static int dirbuf_add (fuse_req_t req, size_t req_size, off_t req_off, struct dirbuf *buf, off_t ent_off, off_t next_off, const char *ent_name, fuse_ino_t ent_ino) {
     struct stat stbuf;
     size_t ent_size;
-    int err, retry;
 
-    INFO("\thello.dirbuf_add: req_size=%zu, req_off=%zu, buf->len=%zu, buf->off=%zu, ent_off=%zu, next_off=%zu, ent_name=%s, ent_ino=%lu",
+    INFO("\thello.dirbuf_add: req_size=%zu, req_off=%zu, buf->len=%zu, buf->off=%zu, ent_off=%zu, next_off=%zu, ent_name=`%s`, ent_ino=%lu",
         req_size, req_off, buf->len, buf->off, ent_off, next_off, ent_name, ent_ino);
-
+    
     // skip entries as needed
-    if (buf->len >= req_size || ent_off < req_off) 
+    if (ent_off < req_off) 
         return 0;
 
     // set ino
     stbuf.st_ino = ent_ino;
 
     // add the dirent and update dirbuf until it fits
-    do {
-        ent_size = fuse_add_direntry(req, buf->buf + buf->off, buf->len - buf->off, ent_name, &stbuf, next_off);
+    if ((ent_size = fuse_add_direntry(req, buf->buf + buf->off, buf->len - buf->off, ent_name, &stbuf, next_off)) > (buf->len - buf->off)) {
+        // 'tis full
+        return 1;
 
-    } while (!(err = dirbuf_update(buf, ent_size, &retry)) && retry);
-
-    if (err)
-        return err;
+    } else {
+        // it fit
+        buf->off += ent_size;
+    }
 
     // success
     return 0;
@@ -201,13 +164,15 @@ void hello_readdir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, stru
     }
 
     // fill in the dirbuf
-    if (dirbuf_init(&buf))
+    if (dirbuf_init(&buf, size))
         ERROR("failed to init dirbuf");
 
-    if (    dirbuf_add(req, size, off, &buf, 0, 1,  ".",        1)
+    err =   dirbuf_add(req, size, off, &buf, 0, 1,  ".",        1)
         ||  dirbuf_add(req, size, off, &buf, 1, 2,  "..",       1)
-        ||  dirbuf_add(req, size, off, &buf, 2, 3,  file_name,  2)
-    ) ERROR("failed to add dirents to buf");
+        ||  dirbuf_add(req, size, off, &buf, 2, 3,  file_name,  2);
+
+    if (err < 0)
+        ERROR("failed to add dirents to buf");
     
     // send it
     if ((err = -dirbuf_done(req, &buf, size)))
@@ -264,12 +229,17 @@ void hello_read (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct 
         FATAL("wrong inode");
     }
     
-    // validate off
-    if (off >= strlen(file_data) && (err = EIO))
-        ERROR("offset is out-of-bounds (%zu >= %zu)", off, strlen(file_data));
+    if (off >= strlen(file_data)) {
+        // offset is out-of-file, so return EOF
+        err = fuse_reply_buf(req, NULL, 0);
+
+    } else {
+        // reply with the requested file data
+        err = fuse_reply_buf(req, file_data + off, MIN(strlen(file_data) - off, size));
+    }
 
     // reply
-    if ((err = fuse_reply_buf(req, file_data + off, MIN(strlen(file_data) - off, size))))
+    if (err)
         PERROR("fuse_reply_buf");
     
     // success
