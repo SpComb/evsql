@@ -5,7 +5,7 @@
  * A simple static in-memory filesystem structure.
  */
 
-#include <fuse/fuse_lowlevel.h>
+#include "evfuse.h"
 
 /*
  * A simple file/dir.

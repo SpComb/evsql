@@ -1,3 +1,5 @@
+#ifndef LIB_LOG_H
+#define LIB_LOG_H
 
 /*
  * error handling
@@ -35,12 +37,10 @@ extern enum _debug_level _cur_debug_level;
 #define eerr_func(func, err, ...)   _generic_err(       1,  func,   err,__VA_ARGS__ )
 
 /*
- * error(func + colon + msg, ...) + goto error
- * err = negative error code
+ * Legacy...
  */
-#define ERROR(...) do { err_func(__func__, __VA_ARGS__); goto error; } while (0)
-#define PERROR(...) do { perr_func(__func__, __VA_ARGS__); goto error; } while (0)
-#define EERROR(err, ...) do { eerr_func(__func__, (err), __VA_ARGS__); goto error; } while (0)
+#include "error.h"
+
 #define FATAL(...) err_func_exit(__func__, __VA_ARGS__)
 #define PFATAL(...) perr_func_exit(__func__, __VA_ARGS__)
 #define WARNING(...) err_func(__func__, __VA_ARGS__)
@@ -68,3 +68,4 @@ extern enum _debug_level _cur_debug_level;
 #define INFO(...) (void) (0)
 #endif
 
+#endif /* LIB_LOG_H */
