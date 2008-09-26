@@ -6,6 +6,7 @@
 #include "simple.h"
 #include "dirbuf.h"
 #include "lib/log.h"
+#include "lib/math.h"
 #include "lib/misc.h"
 
 struct simple_fs {
@@ -111,7 +112,7 @@ error:
         EWARNING(err, "fuse_reply_err");
 }
 
-void simple_readdir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi) {
+static void simple_readdir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi) {
     struct simple_fs *fs = fuse_req_userdata(req);
     const struct simple_node *dir_node, *node;
     struct dirbuf buf;
@@ -166,6 +167,45 @@ error:
         EWARNING(err, "fuse_reply_err");
 }
 
+static void simple_read (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi) {
+    struct simple_fs *fs = fuse_req_userdata(req);
+    const struct simple_node *node;
+    int err ;
+
+    // fi is unused
+    (void) fi;
+
+    INFO("[simple.read] ino=%lu, size=%zu, off=%zu, fi=%p", ino, size, off, fi);
+    
+    // look up the inode
+    if ((node = _simple_get_ino(fs, ino)) == NULL)
+        EERROR(err = EINVAL, "bad inode");
+    
+    // check that it's a dir
+    if (node->mode_type != S_IFREG)
+        EERROR(err = (node->mode_type == S_IFDIR ? EISDIR : EINVAL), "bad mode");
+    
+    // seek past EOF?
+    if (off >= strlen(node->data)) {
+        // offset is out-of-file, so return EOF
+        if ((err = fuse_reply_buf(req, NULL, 0)))
+            EERROR(err, "fuse_reply_buf size=0");
+
+    } else {
+        // reply with the requested file data
+        if ((err = fuse_reply_buf(req, node->data + off, MIN(strlen(node->data) - off, size))))
+            EERROR(err, "fuse_reply_buf buf=%p + %zu, size=MIN(%zu, %zu)", node->data, off, strlen(node->data) - off, size);
+    }
+
+    // success
+    return;
+
+error:
+    if ((err = fuse_reply_err(req, err)))
+        EWARNING(err, "fuse_reply_err");
+}
+
+
 /*
  * Define our fuse_lowlevel_ops struct.
  */
@@ -175,6 +215,8 @@ static struct fuse_lowlevel_ops simple_ops = {
     .getattr = simple_getattr,
 
     .readdir = simple_readdir,
+
+    .read = simple_read,
 };
 
 struct fuse_lowlevel_ops *simple_init () {
