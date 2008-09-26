@@ -9,6 +9,7 @@
 #include "lib/math.h"
 #include "lib/signals.h"
 #include "evfuse.h"
+#include "dirbuf.h"
 
 const char *file_name = "hello";
 const char *file_data = "Hello World\n";
@@ -81,73 +82,6 @@ void hello_getattr (fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi) {
     fuse_reply_attr(req, &stbuf, 1.0);
 }
 
-struct dirbuf {
-    char *buf;
-    size_t len;
-    size_t off;
-};
-
-static int dirbuf_init (struct dirbuf *buf, size_t req_size) {
-    buf->len = req_size;
-    buf->off = 0;
-    
-    // allocate the mem
-    if ((buf->buf = malloc(buf->len)) == NULL)
-        ERROR("malloc");
-    
-    // ok
-    return 0;
-
-error:
-    return -1;
-}
-
-/*
- * Add an ent to the dirbuf. This will assume that the dirbuf is not already full
- * Returns 0 if the ent was added or skipped, -1 on error, 1 if the dirbuf is full
- */
-static int dirbuf_add (fuse_req_t req, size_t req_size, off_t req_off, struct dirbuf *buf, off_t ent_off, off_t next_off, const char *ent_name, fuse_ino_t ent_ino) {
-    struct stat stbuf;
-    size_t ent_size;
-
-    INFO("\thello.dirbuf_add: req_size=%zu, req_off=%zu, buf->len=%zu, buf->off=%zu, ent_off=%zu, next_off=%zu, ent_name=`%s`, ent_ino=%lu",
-        req_size, req_off, buf->len, buf->off, ent_off, next_off, ent_name, ent_ino);
-    
-    // skip entries as needed
-    if (ent_off < req_off) 
-        return 0;
-
-    // set ino
-    stbuf.st_ino = ent_ino;
-
-    // add the dirent and update dirbuf until it fits
-    if ((ent_size = fuse_add_direntry(req, buf->buf + buf->off, buf->len - buf->off, ent_name, &stbuf, next_off)) > (buf->len - buf->off)) {
-        // 'tis full
-        return 1;
-
-    } else {
-        // it fit
-        buf->off += ent_size;
-    }
-
-    // success
-    return 0;
-}
-
-static int dirbuf_done (fuse_req_t req, struct dirbuf *buf, size_t req_size) {
-    int err;
-    
-    // send the reply, return the error later
-    err = fuse_reply_buf(req, buf->buf, MIN(buf->off, req_size));
-
-    INFO("\thello.dirbuf_done: MIN(%zu, %zu)=%zu, err=%d", buf->off, req_size, MIN(buf->off, req_size), err);
-
-    // free the dirbuf
-    free(buf->buf);
-
-    // return the error code
-    return err;
-}
 
 void hello_readdir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi) {
     int err = 0;
@@ -165,15 +99,15 @@ void hello_readdir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, stru
     if (dirbuf_init(&buf, size))
         ERROR("failed to init dirbuf");
 
-    err =   dirbuf_add(req, size, off, &buf, 0, 1,  ".",        1)
-        ||  dirbuf_add(req, size, off, &buf, 1, 2,  "..",       1)
-        ||  dirbuf_add(req, size, off, &buf, 2, 3,  file_name,  2);
+    err =   dirbuf_add(req, off, &buf, 0, 1,  ".",        1,    S_IFDIR )
+        ||  dirbuf_add(req, off, &buf, 1, 2,  "..",       1,    S_IFDIR )
+        ||  dirbuf_add(req, off, &buf, 2, 3,  file_name,  2,    S_IFREG );
 
     if (err < 0)
         ERROR("failed to add dirents to buf");
     
     // send it
-    if ((err = -dirbuf_done(req, &buf, size)))
+    if ((err = -dirbuf_done(req, &buf)))
         EERROR(-err, "failed to send buf");
 
     // success
