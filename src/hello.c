@@ -5,7 +5,7 @@
 #include <event2/event.h>
 #include <fuse/fuse_opt.h>
 
-#include "lib/common.h"
+#include "lib/log.h"
 #include "lib/math.h"
 #include "lib/signals.h"
 #include "evfuse.h"
@@ -86,8 +86,6 @@ struct dirbuf {
     size_t len;
     size_t off;
 };
-
-#define DIRBUF_INITIAL_SIZE 1024
 
 static int dirbuf_init (struct dirbuf *buf, size_t req_size) {
     buf->len = req_size;
@@ -250,6 +248,12 @@ error:
         EWARNING(err, "failed to send error reply");
 }
 
+void hello_getxattr (fuse_req_t req, fuse_ino_t ino, const char *name, size_t size) {
+    INFO("[hello.getxattr] ino=%lu, name=`%s', size=%zu", ino, name, size);
+
+    fuse_reply_err(req, ENOSYS);
+}
+
 struct fuse_lowlevel_ops hello_llops = {
     .init = &hello_init,
     .destroy = &hello_destroy,
@@ -262,6 +266,8 @@ struct fuse_lowlevel_ops hello_llops = {
     .read = &hello_read,
 
     .readdir = &hello_readdir,
+
+    .getxattr = hello_getxattr,
 };
 
 

@@ -4,7 +4,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "common.h"
+#include "log.h"
 
 static void _generic_err_vargs (int use_stderr, const char *func, int perr, const char *fmt, va_list va) {
     FILE *stream = use_stderr ? stderr : stdout;

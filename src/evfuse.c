@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #include "evfuse.h"
-#include "lib/common.h"
+#include "lib/log.h"
 
 struct evfuse {
     // our mountpoint
@@ -58,8 +58,8 @@ static void _evfuse_ev_read (evutil_socket_t fd, short what, void *arg) {
     return;
 
 error:
-    // XXX: fail
-    FATAL("no error handling yet...");
+    // fail
+    evfuse_close(ctx);
 }
 
 struct evfuse *evfuse_new (struct event_base *evbase, struct fuse_args *args, struct fuse_lowlevel_ops *llops, void *cb_data) {
