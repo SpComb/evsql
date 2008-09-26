@@ -112,6 +112,34 @@ error:
         EWARNING(err, "fuse_reply_err");
 }
 
+static void simple_readlink (fuse_req_t req, fuse_ino_t ino) {
+    struct simple_fs *fs = fuse_req_userdata(req);
+    const struct simple_node *node;
+    int err;
+
+    INFO("[simple.readlink %p] ino=%lu", fs, ino);
+    
+    // look up the node 
+    if ((node = _simple_get_ino(fs, ino)) == NULL)
+        EERROR(err = EINVAL, "bad inode");
+
+    // check that it's a symlink
+    if (node->mode_type != S_IFLNK)
+        EERROR(err = EINVAL, "bad mode");
+
+    // return the contents
+    if ((err = fuse_reply_readlink(req, node->data)))
+        EERROR(err, "fuse_reply_readlink");
+
+    // suceccss
+    return;
+
+error:
+    if ((err = fuse_reply_err(req, err)))
+        EWARNING(err, "fuse_reply_err");
+
+}
+
 static void simple_readdir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi) {
     struct simple_fs *fs = fuse_req_userdata(req);
     const struct simple_node *dir_node, *node;
@@ -213,6 +241,8 @@ static struct fuse_lowlevel_ops simple_ops = {
     .lookup = simple_lookup,
 
     .getattr = simple_getattr,
+
+    .readlink = simple_readlink,
 
     .readdir = simple_readdir,
 

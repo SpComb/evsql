@@ -20,6 +20,12 @@ static struct hello {
 static struct simple_node node_list[] = {
     {   1,  S_IFDIR,    0555,   0,  NULL,       NULL                },
     {   2,  S_IFREG,    0444,   1,  "hello",    "Hello World!\n"    },
+    {   3,  S_IFREG,    0444,   1,  "foo",      "Foo\n"             },
+    {   4,  S_IFREG,    0444,   1,  "bar",      "Bar\n"             },
+    {   5,  S_IFDIR,    0555,   1,  "test",     NULL                },
+    {   6,  S_IFREG,    0444,   5,  "file0",    "data0\n"           },
+    {   7,  S_IFREG,    0444,   5,  "file1",    "data1\n"           },
+    {   8,  S_IFLNK,    0444,   1,  "lnk0",     "test/file0"        },
     {   0,  0,          0,      0,  NULL,       NULL                },
 };
 
