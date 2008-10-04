@@ -2,4 +2,5 @@ type: re
 
 ^bin/
 ^obj/
+^build/deps/
 \.[^/]+.sw[op]$

@@ -5,7 +5,7 @@
 #include <assert.h>
 
 #include "signals.h"
-#include "common.h"
+#include "log.h"
 
 struct signals {
     struct event_base *ev_base;

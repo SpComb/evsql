@@ -41,8 +41,6 @@ extern enum _debug_level _cur_debug_level;
  */
 #include "error.h"
 
-#define FATAL(...) err_func_exit(__func__, __VA_ARGS__)
-#define PFATAL(...) perr_func_exit(__func__, __VA_ARGS__)
 #define WARNING(...) err_func(__func__, __VA_ARGS__)
 #define PWARNING(...) perr_func(__func__, __VA_ARGS__)
 #define EWARNING(err, ...) eerr_func(__func__, (err), __VA_ARGS__)
