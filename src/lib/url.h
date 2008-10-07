@@ -4,7 +4,7 @@
 /*
  * A trivial parser for simple URLs
  *
- * [ <scheme> [ "+" <scheme> [ ... ] ] "://" ] [ <username> [ ":" <password> ] "@" ] <hostname> [ ":" <service> ] [ "/" <path> ] [ "?" [ <key> [ "=" <value> ] ] [ "&" [ <key> [ "="     <value> ] ] [ ... ] ]
+ * [ <scheme> [ "+" <scheme> [ ... ] ] "://" ] [ <username> [ ":" <password> ] "@" ] [ <hostname> ] [ ":" <service> ] [ "/" <path> ] [ "?" [ <key> [ "=" <value> ] ] [ "&" [ <key> [ "="     <value> ] ] [ ... ] ]
  *
  *  example.com
  *  tcp://example.com:7348/
@@ -47,6 +47,8 @@ struct url {
 /*
  * Parse the given `text` as an URL, returning the result in `url`. Optional fields that are missing in the text will
  * cause those values to be returned unmodified.
+ *
+ * Returns zero if the url was valid and was parsed, nonzero if it was invalid.
  */
 int url_parse (struct url *url, const char *text);
 
