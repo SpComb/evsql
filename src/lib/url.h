@@ -12,6 +12,8 @@
  *  
  */
 
+#include <sys/types.h>
+
 /*
  * The schema
  */
@@ -28,7 +30,7 @@ struct url_opts {
     struct url_opt {
         const char *key;
         const char *value;
-    } *list;
+    } **list;
 };
 
 /*

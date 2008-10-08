@@ -1,6 +1,11 @@
+#define _GNU_SOURCE
+#include <stdlib.h>
+#include <string.h>
 
 #include "url.h"
-#include "lexer.h"
+#include "lex.h"
+#include "error.h"
+#include "misc.h"
 
 enum url_token {
     URL_INVALID,
@@ -41,8 +46,6 @@ enum url_token {
     URL_OPT_VAL,
     URL_OPT_SEP,
     
-    URL_END,
-
     URL_MAX,
 };
 
@@ -50,24 +53,225 @@ enum url_token {
  * Parser state
  */
 struct url_state {
+    // the URL to parse into
     struct url *url;
-
-
+    
+    // our lookahead-kludge
+    const char *alnum, *alnum2;
+    
 };
+
+static int _url_append_scheme (struct url *url, const char *data) {
+    
+}
+
+static int _url_append_opt_key (struct url *url, const char *key) {
+
+}
+
+static int _url_append_opt_val (struct url *url, const char *value) {
+
+}
 
 static int url_lex_token (int _this_token, char *token_data, int _next_token, int _prev_token, void *arg) {
     enum url_token this_token = _this_token, next_token = _next_token, prev_token = _prev_token;
     struct url_state *state = arg;
+    const char **copy_to = NULL;
 
-}
+    (void) prev_token;
+    
+    switch (this_token) {
+        case URL_BEGIN_ALNUM:
+            switch (next_token) {
+                case URL_SCHEME_SEP:
+                    // store the scheme
+                    if (_url_append_scheme(state->url, token_data))
+                        goto error;
+                    
+                    break;
+                
+                case URL_USERNAME_END:
+                    // store the username
+                    copy_to = &state->url->username; break;
+                
+                case URL_PATH_START:
+                case URL_OPT_START:
+                case LEX_EOF:
+                    // store the hostname
+                    copy_to = &state->url->hostname; break;
 
-static int url_lex_end (int _last_token, void *arg) {
-    enum url_token last_token = _last_token;
-    struct url_state *state = arg;
+                case URL_BEGIN_COLON:
+                    // gah...
+                    copy_to = &state->alnum; break;
+                
 
+                default:
+                    FATAL("weird next token");
+            }
+            
+            break;
+
+        case URL_BEGIN_COLON:
+            switch (next_token) {
+                case URL_SCHEME_END_SLASH1:
+                    // store the schema
+                    if (_url_append_scheme(state->url, token_data))
+                        goto error;
+
+                    break;
+                
+                case URL_USERHOST_ALNUM2:
+                    // gah..
+                    break;
+
+                default:
+                    FATAL("weird next token");
+            }
+
+            break;
+
+        case URL_SCHEME:
+            // store the scheme
+            if (_url_append_scheme(state->url, token_data))
+                goto error;
+
+            break;
+    
+        case URL_SCHEME_SEP:
+            // ignore
+            break;
+
+        case URL_SCHEME_END_COL:
+        case URL_SCHEME_END_SLASH1:
+        case URL_SCHEME_END_SLASH2:
+            // ignore
+            break;
+        
+        case URL_USERHOST_ALNUM:
+            switch (next_token) {
+                case URL_USERNAME_END:
+                    // store the username
+                    copy_to = &state->url->username; break;
+                
+                case URL_PATH_START:
+                case URL_OPT_START:
+                case LEX_EOF:
+                    // store the hostname
+                    copy_to = &state->url->hostname; break;
+
+                case URL_USERHOST_COLON:
+                    // gah...
+                    copy_to = &state->alnum; break;
+
+                default:
+                    FATAL("weird next token");
+            }
+            
+            break;
+
+        case URL_USERHOST_COLON:
+            // ignore
+            break;
+
+        case URL_USERHOST_ALNUM2:
+            switch (next_token) {
+                case URL_USERNAME_END:
+                    // store the username and password
+                    state->url->username = state->alnum; state->alnum = NULL;
+                    copy_to = &state->url->password;
+
+                    break;
+
+                case URL_PATH_START:
+                case URL_OPT_START:
+                case LEX_EOF:
+                    // store the service
+                    copy_to = &state->url->service; break;
+
+                default:
+                    FATAL("weird next token");
+            }
+
+            break;
+
+        case URL_USERNAME:
+        case URL_PASSWORD_SEP:
+        case URL_PASSWORD:
+            FATAL("these should be overshadowed");
+        
+        case URL_USERNAME_END:
+            // ignore
+            break;
+
+        case URL_HOSTNAME:
+            // store
+            copy_to = &state->url->hostname; break;
+
+        case URL_SERVICE_SEP:
+            // ignore
+            break;
+
+        case URL_SERVICE:
+            // store
+            copy_to = &state->url->service; break;
+        
+        case URL_PATH_START:
+            // ignore
+            break;
+
+        case URL_PATH:
+            // store
+            copy_to = &state->url->path; break;
+
+        case URL_OPT_START:
+            // ignore
+            break;
+
+        case URL_OPT_KEY:
+            // store
+            if (_url_append_opt_key(state->url, token_data))
+                goto error;
+
+            break;
+
+        case URL_OPT_EQ:
+            // ignore
+            break;
+
+        case URL_OPT_VAL:
+            // store
+            if (_url_append_opt_val(state->url, token_data))
+                goto error;
+
+            break;
+        
+        case URL_OPT_SEP:
+            // ignore
+            break;
+        
+        default:
+            FATAL("invalid token");
+    }
+    
+    if (copy_to) {
+        // copy the token data
+        if ((*copy_to = strdup(token_data)) == NULL)
+            ERROR("strdup");
+    }
+
+    // good
+    return 0;
+
+error:
+    // XXX: error codes?
+    return -1;
 }
 
 static struct lex url_lex = {
+    .token_fn = url_lex_token,
+    .char_fn = NULL,
+    .end_fn = NULL,
+
     .state_count = URL_MAX,
     .state_list = {
         LEX_STATE ( URL_BEGIN ) {
@@ -135,7 +339,7 @@ static struct lex url_lex = {
             LEX_CHAR        (   '/',    URL_PATH_START          ),  // it was URL_HOSTNAME
             LEX_CHAR        (   '?',    URL_OPT_START           ),  // it was URL_HOSTNAME
             LEX_END
-        }
+        },
         
         // this can be URL_USERNAME_END or URL_SERVICE_SEP
         LEX_STATE ( URL_USERHOST_COLON ) {
@@ -212,7 +416,7 @@ static struct lex url_lex = {
 
         LEX_STATE_END ( URL_OPT_START ) {
             LEX_CHAR        (   '&',    URL_OPT_SEP             ),
-            LEX_CHAR        (   '=',    URL_ERROR               ),
+            LEX_INVALID     (   '='                             ),
             LEX_DEFAULT     (           URL_OPT_KEY             ),
         },
 
@@ -224,30 +428,26 @@ static struct lex url_lex = {
 
         LEX_STATE_END ( URL_OPT_EQ ) {
             LEX_CHAR        (   '&',    URL_OPT_SEP             ),
+            LEX_INVALID     (   '='                             ),
             LEX_DEFAULT     (           URL_OPT_VAL             ),
         },
 
         LEX_STATE_END ( URL_OPT_VAL ) {
             LEX_CHAR        (   '&',    URL_OPT_SEP             ),
+            LEX_INVALID     (   '='                             ),
             LEX_DEFAULT     (           URL_OPT_VAL             ),
         },
 
         LEX_STATE_END ( URL_OPT_SEP ) {
             LEX_CHAR        (   '&',    URL_OPT_SEP             ),
-            LEX_CHAR        (   '=',    URL_ERROR               ),
+            LEX_INVALID     (   '='                             ),
             LEX_DEFAULT     (           URL_OPT_KEY             ),
         },
         
         LEX_STATE ( URL_ERROR ) {
             LEX_END
         },
-
-        URL_MAX,
-    },
-
-    .token_fn = url_lex_token,
-    .char_fn = NULL,
-    .end_fn = url_lex_end,
+    }
 };
 
 int url_parse (struct url *url, const char *text) {

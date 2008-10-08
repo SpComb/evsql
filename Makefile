@@ -19,6 +19,7 @@ bin/helloworld:
 bin/hello: obj/evfuse.o obj/dirbuf.o obj/lib/log.o obj/lib/signals.o
 bin/simple_hello: obj/evfuse.o obj/dirbuf.o obj/lib/log.o obj/lib/signals.o obj/simple.o
 bin/evpq_test: obj/evpq.o obj/lib/log.o
+bin/url_test: obj/lib/url.o obj/lib/lex.o obj/lib/log.o
 
 # computed
 LDFLAGS = ${LIBRARY_PATHS} ${LIBRARY_LIST}
