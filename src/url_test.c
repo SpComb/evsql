@@ -7,7 +7,9 @@
 
 #define FAIL(...) do { printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); return -1; } while (0)
 
-struct url_schema basic_http = { 1, { "http" } };
+struct url_schema
+    basic_http = { 1, { "http" } },
+    svn_ssh = { 2, { "svn", "ssh" } };
 
 struct url_test {
     const char *url;
@@ -19,6 +21,14 @@ struct url_test {
 
     {   "http://example.com/path",  {
         &basic_http, NULL, NULL, "example.com", NULL, "path", NULL 
+    } },
+
+    {   "svn+ssh://user:passwd@someplace:someport/something",   {
+        &svn_ssh, "user", "passwd", "someplace", "someport", "something"
+    } },
+
+    {   "user@:service/",   {
+        NULL, "user", NULL, NULL, "service", NULL
     } },
     
     {   NULL,               {   } },

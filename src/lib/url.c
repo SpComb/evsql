@@ -62,8 +62,29 @@ struct url_state {
     
 };
 
-static int _url_append_scheme (struct url *url, const char *data) {
+static int _url_append_scheme (struct url *url, const char *data, int copy) {
+    if (!url->schema) {
+        if ((url->schema = malloc(sizeof(struct url_schema) + (1 * sizeof(const char *)))) == NULL)
+            ERROR("malloc");
+
+        url->schema->count = 1;
+
+    } else {
+        url->schema->count++;
+        
+        // I'm starting to hate flexible array members...
+        if ((url->schema = realloc(url->schema, sizeof(struct url_schema) + url->schema->count * sizeof(const char *))) == NULL)
+            ERROR("realloc");
+    }
+    
+    if ((url->schema->list[url->schema->count - 1] = copy ? strdup(data) : data) == NULL)
+        ERROR("strdup");
+
+    // k
     return 0;
+
+error:
+    return -1;
 }
 
 static int _url_append_opt_key (struct url *url, const char *key) {
@@ -274,7 +295,7 @@ static int url_lex_token (int _this_token, char *token_data, int _next_token, in
             switch (next_token) {
                 case URL_SCHEME_SEP:
                     // store the scheme
-                    if (_url_append_scheme(state->url, token_data))
+                    if (_url_append_scheme(state->url, token_data, 1))
                         goto error;
                     
                     break;
@@ -304,8 +325,10 @@ static int url_lex_token (int _this_token, char *token_data, int _next_token, in
             switch (next_token) {
                 case URL_SCHEME_END_SLASH1:
                     // store the schema
-                    if (_url_append_scheme(state->url, token_data))
+                    if (_url_append_scheme(state->url, state->alnum, 0))
                         goto error;
+                    
+                    state->alnum = NULL;
 
                     break;
                 
@@ -321,7 +344,7 @@ static int url_lex_token (int _this_token, char *token_data, int _next_token, in
 
         case URL_SCHEME:
             // store the scheme
-            if (_url_append_scheme(state->url, token_data))
+            if (_url_append_scheme(state->url, token_data, 1))
                 goto error;
 
             break;
@@ -489,16 +512,16 @@ void url_dump (const struct url *url, FILE *stream) {
     int i;
 
     if (url->schema) {
-        fprintf(stream, "schema=");
+        fprintf(stream, "schema=(");
 
         for (i = 0; i < url->schema->count; i++) {
             if (i > 0)
-                fprintf(stream, "+");
+                fprintf(stream, ",");
 
             fprintf(stream, "%s", url->schema->list[i]);
         }
 
-        fprintf(stream, " ");
+        fprintf(stream, ") ");
     }
 
     _url_dump_part("username", url->username, stream);
