@@ -5,6 +5,7 @@
 #include "url.h"
 #include "lex.h"
 #include "error.h"
+#include "log.h"
 #include "misc.h"
 
 enum url_token {
@@ -62,16 +63,200 @@ struct url_state {
 };
 
 static int _url_append_scheme (struct url *url, const char *data) {
-    
+    return 0;
 }
 
 static int _url_append_opt_key (struct url *url, const char *key) {
-
+    return 0;
 }
 
 static int _url_append_opt_val (struct url *url, const char *value) {
-
+    return 0;
 }
+
+static int url_lex_token (int _this_token, char *token_data, int _next_token, int _prev_token, void *arg);
+
+static struct lex url_lex = {
+    .token_fn = url_lex_token,
+    .char_fn = NULL,
+    .end_fn = NULL,
+
+    .state_count = URL_MAX,
+    .initial_state = URL_BEGIN,
+    .state_list = {
+        LEX_STATE ( URL_BEGIN ) {
+            LEX_ALNUM       (           URL_BEGIN_ALNUM         ),
+            LEX_CHAR        (   ':',    URL_SERVICE_SEP         ),
+            LEX_CHAR        (   '/',    URL_PATH_START          ),
+            LEX_CHAR        (   '?',    URL_OPT_START           ),
+            LEX_END
+        },
+        
+        // this can be URL_SCHEME, URL_USERNAME or URL_HOSTNAME
+        LEX_STATE_END ( URL_BEGIN_ALNUM ) {
+            LEX_ALNUM       (           URL_BEGIN_ALNUM         ),
+            LEX_CHAR        (   '+',    URL_SCHEME_SEP          ),  // it was URL_SCHEME
+            LEX_CHAR        (   ':',    URL_BEGIN_COLON         ), 
+            LEX_CHAR        (   '@',    URL_USERNAME_END        ),  // it was URL_USERNAME
+            LEX_CHAR        (   '/',    URL_PATH_START          ),  // it was URL_HOSTNAME
+            LEX_CHAR        (   '?',    URL_OPT_START           ),  // it was URL_HOSTNAME
+            LEX_END
+        },
+        
+        // this can be URL_SCHEME_END_COL, URL_USERNAME_END or URL_SERVICE_SEP
+        LEX_STATE ( URL_BEGIN_COLON ) {
+            LEX_CHAR        (   '/',    URL_SCHEME_END_SLASH1   ),  // it was URL_SCHEME
+            LEX_ALNUM       (           URL_USERHOST_ALNUM2     ),
+            LEX_END
+        },
+       
+
+        LEX_STATE ( URL_SCHEME ) { 
+            LEX_ALNUM       (           URL_SCHEME              ),
+            LEX_CHAR        (   '+',    URL_SCHEME_SEP          ),
+            LEX_CHAR        (   ':',    URL_SCHEME_END_COL      ),
+            LEX_END
+        },
+
+        LEX_STATE ( URL_SCHEME_SEP ) {
+            LEX_ALNUM       (           URL_SCHEME              ),
+            LEX_END
+        },
+
+        LEX_STATE ( URL_SCHEME_END_COL ) {
+            LEX_CHAR        (   '/',    URL_SCHEME_END_SLASH1   ),
+            LEX_END
+        },
+
+        LEX_STATE ( URL_SCHEME_END_SLASH1 ) {
+            LEX_CHAR        (   '/',    URL_SCHEME_END_SLASH2   ),
+            LEX_END
+        },
+
+        LEX_STATE_END ( URL_SCHEME_END_SLASH2 ) {
+            LEX_ALNUM       (           URL_USERHOST_ALNUM      ),
+            LEX_CHAR        (   ':',    URL_SERVICE_SEP         ),
+            LEX_CHAR        (   '/',    URL_PATH_START          ),
+            LEX_CHAR        (   '?',    URL_OPT_START           ),
+            LEX_END
+        },
+        
+        // this can be URL_USERNAME or URL_HOSTNAME
+        LEX_STATE_END ( URL_USERHOST_ALNUM ) {
+            LEX_CHAR        (   ':',    URL_USERHOST_COLON      ), 
+            LEX_CHAR        (   '@',    URL_USERNAME_END        ),  // it was URL_USERNAME
+            LEX_CHAR        (   '/',    URL_PATH_START          ),  // it was URL_HOSTNAME
+            LEX_CHAR        (   '?',    URL_OPT_START           ),  // it was URL_HOSTNAME
+            LEX_DEFAULT     (           URL_USERHOST_ALNUM      ),
+        },
+        
+        // this can be URL_USERNAME_END or URL_SERVICE_SEP
+        LEX_STATE ( URL_USERHOST_COLON ) {
+            LEX_ALNUM       (           URL_USERHOST_ALNUM2        ),
+            LEX_END
+        },
+        
+        // this can be URL_PASSWORD or URL_SERVICE
+        LEX_STATE_END ( URL_USERHOST_ALNUM2 ) {
+            LEX_CHAR        (   '@',    URL_USERNAME_END        ),  // it was URL_PASSSWORD
+            LEX_CHAR        (   '/',    URL_PATH_START          ),  // it was URL_SERVICE
+            LEX_CHAR        (   '?',    URL_OPT_START           ),  // it was URL_SERVICE
+            LEX_DEFAULT     (           URL_USERHOST_ALNUM2     ),
+        },
+        
+        // dummy states, covered by URL_USERHOST_ALNUM/URL_USERHOST_COLON/URL_USERHOST_ALNUM2
+        LEX_STATE ( URL_USERNAME ) {
+            LEX_END
+        },
+
+        LEX_STATE ( URL_PASSWORD_SEP ) {
+            LEX_END
+        },
+
+        LEX_STATE ( URL_PASSWORD ) {
+            LEX_END
+        },
+
+
+        LEX_STATE_END ( URL_USERNAME_END ) {
+            LEX_ALNUM       (           URL_HOSTNAME            ), 
+            LEX_CHAR        (   ':',    URL_SERVICE_SEP         ),
+            LEX_CHAR        (   '/',    URL_PATH_START          ),
+            LEX_CHAR        (   '?',    URL_OPT_START           ),
+            LEX_END
+        },
+
+
+        LEX_STATE_END ( URL_HOSTNAME ) {
+            LEX_ALNUM       (           URL_HOSTNAME            ), 
+            LEX_CHAR        (   ':',    URL_SERVICE_SEP         ),
+            LEX_CHAR        (   '/',    URL_PATH_START          ),
+            LEX_CHAR        (   '?',    URL_OPT_START           ),
+            LEX_END
+        },
+
+
+        LEX_STATE ( URL_SERVICE_SEP ) {
+            LEX_ALNUM       (           URL_SERVICE            ), 
+            LEX_CHAR        (   '/',    URL_PATH_START          ),
+            LEX_CHAR        (   '?',    URL_OPT_START           ),
+            LEX_END
+        },
+
+        LEX_STATE_END ( URL_SERVICE ) {
+            LEX_ALNUM       (           URL_SERVICE            ), 
+            LEX_CHAR        (   '/',    URL_PATH_START          ),
+            LEX_CHAR        (   '?',    URL_OPT_START           ),
+            LEX_END
+        },
+
+
+        LEX_STATE_END ( URL_PATH_START ) {
+            LEX_CHAR        (   '?',    URL_OPT_START           ),
+            LEX_DEFAULT     (           URL_PATH                ),
+        },
+
+        LEX_STATE_END ( URL_PATH ) {
+            LEX_CHAR        (   '?',    URL_OPT_START           ),
+            LEX_DEFAULT     (           URL_PATH                ),
+        },
+
+
+        LEX_STATE_END ( URL_OPT_START ) {
+            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
+            LEX_INVALID     (   '='                             ),
+            LEX_DEFAULT     (           URL_OPT_KEY             ),
+        },
+
+        LEX_STATE_END ( URL_OPT_KEY ) {
+            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
+            LEX_CHAR        (   '=',    URL_OPT_EQ              ),
+            LEX_DEFAULT     (           URL_OPT_KEY             ),
+        },
+
+        LEX_STATE_END ( URL_OPT_EQ ) {
+            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
+            LEX_INVALID     (   '='                             ),
+            LEX_DEFAULT     (           URL_OPT_VAL             ),
+        },
+
+        LEX_STATE_END ( URL_OPT_VAL ) {
+            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
+            LEX_INVALID     (   '='                             ),
+            LEX_DEFAULT     (           URL_OPT_VAL             ),
+        },
+
+        LEX_STATE_END ( URL_OPT_SEP ) {
+            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
+            LEX_INVALID     (   '='                             ),
+            LEX_DEFAULT     (           URL_OPT_KEY             ),
+        },
+        
+        LEX_STATE ( URL_ERROR ) {
+            LEX_END
+        },
+    }
+};
 
 static int url_lex_token (int _this_token, char *token_data, int _next_token, int _prev_token, void *arg) {
     enum url_token this_token = _this_token, next_token = _next_token, prev_token = _prev_token;
@@ -81,6 +266,10 @@ static int url_lex_token (int _this_token, char *token_data, int _next_token, in
     (void) prev_token;
     
     switch (this_token) {
+        case URL_BEGIN:
+            // irrelevant
+            break;
+
         case URL_BEGIN_ALNUM:
             switch (next_token) {
                 case URL_SCHEME_SEP:
@@ -185,7 +374,8 @@ static int url_lex_token (int _this_token, char *token_data, int _next_token, in
                 case URL_PATH_START:
                 case URL_OPT_START:
                 case LEX_EOF:
-                    // store the service
+                    // store the hostname and service
+                    state->url->hostname = state->alnum; state->alnum = NULL;
                     copy_to = &state->url->service; break;
 
                 default:
@@ -250,7 +440,7 @@ static int url_lex_token (int _this_token, char *token_data, int _next_token, in
             break;
         
         default:
-            FATAL("invalid token");
+            ERROR("invalid token");
     }
     
     if (copy_to) {
@@ -263,192 +453,13 @@ static int url_lex_token (int _this_token, char *token_data, int _next_token, in
     return 0;
 
 error:
-    // XXX: error codes?
+    DEBUG("token: %s -> %s -> %s: %s", 
+        LEX_STATE_NAME(&url_lex, prev_token), LEX_STATE_NAME(&url_lex, this_token), LEX_STATE_NAME(&url_lex, next_token),
+        token_data
+    );
     return -1;
 }
 
-static struct lex url_lex = {
-    .token_fn = url_lex_token,
-    .char_fn = NULL,
-    .end_fn = NULL,
-
-    .state_count = URL_MAX,
-    .state_list = {
-        LEX_STATE ( URL_BEGIN ) {
-            LEX_ALNUM       (           URL_BEGIN_ALNUM         ),
-            LEX_CHAR        (   ':',    URL_SERVICE_SEP         ),
-            LEX_CHAR        (   '/',    URL_PATH_START          ),
-            LEX_CHAR        (   '?',    URL_OPT_START           ),
-            LEX_END
-        },
-        
-        // this can be URL_SCHEME, URL_USERNAME or URL_HOSTNAME
-        LEX_STATE_END ( URL_BEGIN_ALNUM ) {
-            LEX_ALNUM       (           URL_BEGIN_ALNUM         ),
-            LEX_CHAR        (   '+',    URL_SCHEME_SEP          ),  // it was URL_SCHEME
-            LEX_CHAR        (   ':',    URL_BEGIN_COLON         ), 
-            LEX_CHAR        (   '@',    URL_USERNAME_END        ),  // it was URL_USERNAME
-            LEX_CHAR        (   '/',    URL_PATH_START          ),  // it was URL_HOSTNAME
-            LEX_CHAR        (   '?',    URL_OPT_START           ),  // it was URL_HOSTNAME
-            LEX_END
-        },
-        
-        // this can be URL_SCHEME_END_COL, URL_USERNAME_END or URL_SERVICE_SEP
-        LEX_STATE ( URL_BEGIN_COLON ) {
-            LEX_CHAR        (   '/',    URL_SCHEME_END_SLASH1   ),  // it was URL_SCHEME
-            LEX_ALNUM       (           URL_USERHOST_ALNUM2     ),
-            LEX_END
-        },
-       
-
-        LEX_STATE ( URL_SCHEME ) { 
-            LEX_ALNUM       (           URL_SCHEME              ),
-            LEX_CHAR        (   '+',    URL_SCHEME_SEP          ),
-            LEX_CHAR        (   ':',    URL_SCHEME_END_COL      ),
-            LEX_END
-        },
-
-        LEX_STATE ( URL_SCHEME_SEP ) {
-            LEX_ALNUM       (           URL_SCHEME              ),
-            LEX_END
-        },
-
-        LEX_STATE ( URL_SCHEME_END_COL ) {
-            LEX_CHAR        (   '/',    URL_SCHEME_END_SLASH1   ),
-            LEX_END
-        },
-
-        LEX_STATE ( URL_SCHEME_END_SLASH1 ) {
-            LEX_CHAR        (   '/',    URL_SCHEME_END_SLASH2   ),
-            LEX_END
-        },
-
-        LEX_STATE_END ( URL_SCHEME_END_SLASH2 ) {
-            LEX_ALNUM       (           URL_USERHOST_ALNUM      ),
-            LEX_CHAR        (   ':',    URL_SERVICE_SEP         ),
-            LEX_CHAR        (   '/',    URL_PATH_START          ),
-            LEX_CHAR        (   '?',    URL_OPT_START           ),
-            LEX_END
-        },
-        
-        // this can be URL_USERNAME or URL_HOSTNAME
-        LEX_STATE_END ( URL_USERHOST_ALNUM ) {
-            LEX_ALNUM       (           URL_USERHOST_ALNUM      ),
-            LEX_CHAR        (   ':',    URL_USERHOST_COLON      ), 
-            LEX_CHAR        (   '@',    URL_USERNAME_END        ),  // it was URL_USERNAME
-            LEX_CHAR        (   '/',    URL_PATH_START          ),  // it was URL_HOSTNAME
-            LEX_CHAR        (   '?',    URL_OPT_START           ),  // it was URL_HOSTNAME
-            LEX_END
-        },
-        
-        // this can be URL_USERNAME_END or URL_SERVICE_SEP
-        LEX_STATE ( URL_USERHOST_COLON ) {
-            LEX_ALNUM       (           URL_USERHOST_ALNUM2        ),
-            LEX_END
-        },
-        
-        // this can be URL_PASSWORD or URL_SERVICE
-        LEX_STATE_END ( URL_USERHOST_ALNUM2 ) {
-            LEX_ALNUM       (           URL_USERHOST_ALNUM      ),
-            LEX_CHAR        (   '@',    URL_USERNAME_END        ),  // it was URL_PASSSWORD
-            LEX_CHAR        (   '/',    URL_PATH_START          ),  // it was URL_SERVICE
-            LEX_CHAR        (   '?',    URL_OPT_START           ),  // it was URL_SERVICE
-            LEX_END
-        },
-        
-        // dummy states, covered by URL_USERHOST_ALNUM/URL_USERHOST_COLON/URL_USERHOST_ALNUM2
-        LEX_STATE ( URL_USERNAME ) {
-            LEX_END
-        },
-
-        LEX_STATE ( URL_PASSWORD_SEP ) {
-            LEX_END
-        },
-
-        LEX_STATE ( URL_PASSWORD ) {
-            LEX_END
-        },
-
-
-        LEX_STATE_END ( URL_USERNAME_END ) {
-            LEX_ALNUM       (           URL_HOSTNAME            ), 
-            LEX_CHAR        (   ':',    URL_SERVICE_SEP         ),
-            LEX_CHAR        (   '/',    URL_PATH_START          ),
-            LEX_CHAR        (   '?',    URL_OPT_START           ),
-            LEX_END
-        },
-
-
-        LEX_STATE_END ( URL_HOSTNAME ) {
-            LEX_ALNUM       (           URL_HOSTNAME            ), 
-            LEX_CHAR        (   ':',    URL_SERVICE_SEP         ),
-            LEX_CHAR        (   '/',    URL_PATH_START          ),
-            LEX_CHAR        (   '?',    URL_OPT_START           ),
-            LEX_END
-        },
-
-
-        LEX_STATE ( URL_SERVICE_SEP ) {
-            LEX_ALNUM       (           URL_SERVICE            ), 
-            LEX_CHAR        (   '/',    URL_PATH_START          ),
-            LEX_CHAR        (   '?',    URL_OPT_START           ),
-            LEX_END
-        },
-
-        LEX_STATE_END ( URL_SERVICE ) {
-            LEX_ALNUM       (           URL_SERVICE            ), 
-            LEX_CHAR        (   '/',    URL_PATH_START          ),
-            LEX_CHAR        (   '?',    URL_OPT_START           ),
-            LEX_END
-        },
-
-
-        LEX_STATE_END ( URL_PATH_START ) {
-            LEX_CHAR        (   '?',    URL_OPT_START           ),
-            LEX_DEFAULT     (           URL_PATH                ),
-        },
-
-        LEX_STATE_END ( URL_PATH ) {
-            LEX_CHAR        (   '?',    URL_OPT_START           ),
-            LEX_DEFAULT     (           URL_PATH                ),
-        },
-
-
-        LEX_STATE_END ( URL_OPT_START ) {
-            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
-            LEX_INVALID     (   '='                             ),
-            LEX_DEFAULT     (           URL_OPT_KEY             ),
-        },
-
-        LEX_STATE_END ( URL_OPT_KEY ) {
-            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
-            LEX_CHAR        (   '=',    URL_OPT_EQ              ),
-            LEX_DEFAULT     (           URL_OPT_KEY             ),
-        },
-
-        LEX_STATE_END ( URL_OPT_EQ ) {
-            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
-            LEX_INVALID     (   '='                             ),
-            LEX_DEFAULT     (           URL_OPT_VAL             ),
-        },
-
-        LEX_STATE_END ( URL_OPT_VAL ) {
-            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
-            LEX_INVALID     (   '='                             ),
-            LEX_DEFAULT     (           URL_OPT_VAL             ),
-        },
-
-        LEX_STATE_END ( URL_OPT_SEP ) {
-            LEX_CHAR        (   '&',    URL_OPT_SEP             ),
-            LEX_INVALID     (   '='                             ),
-            LEX_DEFAULT     (           URL_OPT_KEY             ),
-        },
-        
-        LEX_STATE ( URL_ERROR ) {
-            LEX_END
-        },
-    }
-};
 
 int url_parse (struct url *url, const char *text) {
     struct url_state state; ZINIT(state);
@@ -466,5 +477,44 @@ int url_parse (struct url *url, const char *text) {
 
 error:
     return -1;
+}
+
+static void _url_dump_part (const char *field, const char *val, FILE *stream) {
+    if (val) {
+        fprintf(stream, "%s=%s ", field, val);
+    }
+}
+
+void url_dump (const struct url *url, FILE *stream) {
+    int i;
+
+    if (url->schema) {
+        fprintf(stream, "schema=");
+
+        for (i = 0; i < url->schema->count; i++) {
+            if (i > 0)
+                fprintf(stream, "+");
+
+            fprintf(stream, "%s", url->schema->list[i]);
+        }
+
+        fprintf(stream, " ");
+    }
+
+    _url_dump_part("username", url->username, stream);
+    _url_dump_part("password", url->password, stream);
+    _url_dump_part("hostname", url->hostname, stream);
+    _url_dump_part("service", url->service, stream);
+    _url_dump_part("path", url->path, stream);
+
+    if (url->opts) {
+        fprintf(stream, "opts: ");
+
+        for (i = 0; i < url->opts->count; i++) {
+            fprintf(stream, "%s=%s ", url->opts->list[i].key, url->opts->list[i].value);
+        }
+    }
+
+    fprintf(stream, "\n");
 }
 

@@ -5,8 +5,9 @@
 
 #include "lib/url.h"
 
-#define FAIL(...) do { printf("FAIL: "); printf(__VA_ARGS__); return -1; } while (0)
+#define FAIL(...) do { printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); return -1; } while (0)
 
+struct url_schema basic_http = { 1, { "http" } };
 
 struct url_test {
     const char *url;
@@ -16,9 +17,9 @@ struct url_test {
         NULL, NULL, NULL, "localhost", "http", NULL, NULL
     } },
 
-/*    {   "http://example.com/path",  {
-        { 1, { "http" } }, NULL, NULL, "example.com", NULL, "path", NULL 
-    } }, */
+    {   "http://example.com/path",  {
+        &basic_http, NULL, NULL, "example.com", NULL, "path", NULL 
+    } },
     
     {   NULL,               {   } },
 };
@@ -26,14 +27,14 @@ struct url_test {
 int cmp_url_str (const char *field, const char *test, const char *real) {
     if (!test) {
         if (real)
-            FAIL("%s: shouldn't be present", field);
+            FAIL("%s shouldn't be present", field);
 
     } else if (!real) {
-        FAIL("%s: missing", field);
+        FAIL("%s is missing", field);
 
     } else {
         if (strcmp(test, real) != 0)
-            FAIL("%s: differs: %s -> %s", field, test, real);
+            FAIL("%s differs: %s -> %s", field, test, real);
     }
 
     // ok
@@ -94,10 +95,10 @@ int cmp_url (const struct url *test, const struct url *real) {
             FAIL("inconsistent opts count");
         
         for (i = 0; i < test->opts->count; i++) {
-            if (strcmp(test->opts->list[i]->key, real->opts->list[i]->key) != 0)
+            if (strcmp(test->opts->list[i].key, real->opts->list[i].key) != 0)
                 FAIL("differing scheme key #%d", i);
             
-            if (strcmp(test->opts->list[i]->value, real->opts->list[i]->value) != 0)
+            if (strcmp(test->opts->list[i].value, real->opts->list[i].value) != 0)
                 FAIL("differing scheme value #%d", i);
         }
     }
@@ -107,45 +108,6 @@ int cmp_url (const struct url *test, const struct url *real) {
 
 error:
     return -1;
-}
-
-void print_url_part (const char *field, const char *val) {
-    if (val) {
-        printf("%s=%s ", field, val);
-    }
-}
-
-void print_url (const struct url *url) {
-    int i;
-
-    if (url->schema) {
-        printf("schema=");
-
-        for (i = 0; i < url->schema->count; i++) {
-            if (i > 0)
-                printf("+");
-
-            printf("%s", url->schema->list[i]);
-        }
-
-        printf(" ");
-    }
-
-    print_url_part("username", url->username);
-    print_url_part("password", url->password);
-    print_url_part("hostname", url->hostname);
-    print_url_part("service", url->service);
-    print_url_part("path", url->path);
-
-    if (url->opts) {
-        printf("opts: ");
-
-        for (i = 0; i < url->opts->count; i++) {
-            printf("%s=%s ", url->opts->list[i]->key, url->opts->list[i]->value);
-        }
-    }
-
-    printf("\n");
 }
 
 void usage (const char *exec_name) {
@@ -164,7 +126,7 @@ int main (int argc, char **argv) {
     // run the tests
     for (test = url_tests; test->url; test++) {
         // first output the URL we are handling...
-        printf("%s... ", test->url);
+        printf("%-80s - ", test->url);
         fflush(stdout);
         
         // parse the URL
@@ -178,14 +140,14 @@ int main (int argc, char **argv) {
         // compare it
         if (cmp_url(&test->expected, &url)) {
             printf("\texpected: ");
-            print_url(&test->expected);
+            url_dump(&test->expected, stdout);
 
             printf("\tresult:   ");
-            print_url(&url);
+            url_dump(&url, stdout);
 
         } else {
             printf("OK\n\t");
-            print_url(&url);
+            url_dump(&url, stdout);
         }
     }
 }

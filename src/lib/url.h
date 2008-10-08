@@ -13,13 +13,14 @@
  */
 
 #include <sys/types.h>
+#include <stdio.h>
 
 /*
  * The schema
  */
 struct url_schema {
     size_t count;
-    const char **list;
+    const char *list[];
 };
 
 /*
@@ -30,7 +31,7 @@ struct url_opts {
     struct url_opt {
         const char *key;
         const char *value;
-    } **list;
+    } list[];
 };
 
 /*
@@ -53,5 +54,10 @@ struct url {
  * Returns zero if the url was valid and was parsed, nonzero if it was invalid.
  */
 int url_parse (struct url *url, const char *text);
+
+/*
+ * Prints a url in a debug-output format.
+ */
+void url_dump (const struct url *url, FILE *stream);
 
 #endif /* LIB_URL_H */

@@ -17,7 +17,8 @@
  */
 enum lex_transition_flags {
     LEX_TRANS_DEFAULT   = 0x01,
-    LEX_TRANS_FINAL     = 0x02,
+    /* not supported
+    LEX_TRANS_FINAL     = 0x02, */
     LEX_TRANS_INVALID   = 0x04,
 };
 
@@ -57,11 +58,14 @@ struct lex_state {
 };
 
 /*
- * Special tokens
+ * Special states, these are all defined as zero
  */
 
 // shows up in token_fn as the value of next_token when this_token is the last token.
 #define LEX_EOF 0
+
+// shows up as the initial value of prev_token
+#define LEX_INITIAL 0
 
 /*
  * Lex machine
@@ -80,11 +84,13 @@ struct lex {
     int (*token_fn) (int this_token, char *token_data, int next_token, int prev_token, void *arg);
 
     /*
-     * Called on every char handled by the lexer. `this_token` is the state of the token that the char belongs to.
+     * Called on every char handled by the lexer.
+     *
+     * The NUL byte at the end of the input string is not passed to char_fn (why not?).
      *
      * Return zero to have lexing continue, nonzero to stop lexing.
      */
-    int (*char_fn) (int this_token, char token_char, void *arg);
+    int (*char_fn) (char token_char, int from_token, int to_token, void *arg);
 
     /*
      * Called when the end of input has been reached, `last_token` is the state that we terminated in.
@@ -95,6 +101,9 @@ struct lex {
     
     // number of states
     size_t state_count;
+
+    // initial state
+    int initial_state;
 
     // array of lex_states, indexable by the state id.
     struct lex_state state_list[];
@@ -118,6 +127,11 @@ struct lex {
                                   }
     #define LEX_END                 { 0, 0, 0, 0 } \
                                   }
+
+/*
+ * Helpers for handling states
+ */ 
+#define LEX_STATE_NAME(lex, state) ((state) ? (lex)->state_list[(state) - 1].name : "...")
 
 /*
  * Lex it!
