@@ -33,16 +33,13 @@ struct evpq_callback_info {
     void (*fn_done)(struct evpq_conn *conn, void *arg);
     
     /*
-     * Something caused this evpq_conn to fail :(
+     * The evpq_conn has suffered a complete failure.
+     *
+     * Most likely, this means that the connection to the server was lost, or not established at all.
      *
      * XXX: add a `what` arg?
      */
     void (*fn_failure)(struct evpq_conn *conn, void *arg);
-
-    /*
-     * Arg to pass through to all callbacks.
-     */
-    void *cb_arg;
 };
 
 /*
@@ -69,7 +66,7 @@ enum evpq_state {
  *
  * cb_info contains the callback functions (and the user argument) to use.
  */
-struct evpq_conn *evpq_connect (struct event_base *ev_base, const char *conninfo, const struct evpq_callback_info cb_info);
+struct evpq_conn *evpq_connect (struct event_base *ev_base, const char *conninfo, const struct evpq_callback_info cb_info, void *cb_arg);
 
 /*
  * Execute a query.
@@ -81,6 +78,11 @@ struct evpq_conn *evpq_connect (struct event_base *ev_base, const char *conninfo
  * followed by a fn_done (EVPQ_CONNECTED).
  */
 int evpq_query (struct evpq_conn *conn, const char *command);
+
+/*
+ * Connection state à la evpq.
+ */
+enum evpq_state evpq_state (struct evpq_conn *conn);
 
 /*
  * Get the actual PGconn.

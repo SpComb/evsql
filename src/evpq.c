@@ -9,6 +9,7 @@
 struct evpq_conn {
     struct event_base *ev_base;
     struct evpq_callback_info user_cb;
+    void *user_cb_arg;
 
     PGconn *pg_conn;
 
@@ -25,7 +26,7 @@ static void _evpq_failure (struct evpq_conn *conn) {
     conn->state = EVPQ_FAILURE;
 
     // notify
-    conn->user_cb.fn_failure(conn, conn->user_cb.cb_arg);
+    conn->user_cb.fn_failure(conn, conn->user_cb_arg);
 }
 
 /*
@@ -36,7 +37,7 @@ static void _evpq_connect_ok (struct evpq_conn *conn) {
     conn->state = EVPQ_CONNECTED;
 
     // notify
-    conn->user_cb.fn_connected(conn, conn->user_cb.cb_arg);
+    conn->user_cb.fn_connected(conn, conn->user_cb_arg);
 }
 
 /*
@@ -61,14 +62,14 @@ static int _evpq_query_result (struct evpq_conn *conn) {
         conn->state = EVPQ_CONNECTED;
 
         // tell the user the query is done
-        conn->user_cb.fn_done(conn, conn->user_cb.cb_arg);
+        conn->user_cb.fn_done(conn, conn->user_c_arg);
 
         // stop waiting for more results
         return 1;
 
     } else {
         // got a result, give it to the user
-        conn->user_cb.fn_result(conn, result, conn->user_cb.cb_arg);
+        conn->user_cb.fn_result(conn, result, conn->user_cb_arg);
 
         // great
         return 0;
@@ -206,7 +207,7 @@ error:
 
 }
 
-struct evpq_conn *evpq_connect (struct event_base *ev_base, const char *conninfo, const struct evpq_callback_info cb_info) {
+struct evpq_conn *evpq_connect (struct event_base *ev_base, const char *conninfo, const struct evpq_callback_info cb_info, void *cb_arg) {
     struct evpq_conn *conn = NULL;
     
     // alloc our context
@@ -216,6 +217,7 @@ struct evpq_conn *evpq_connect (struct event_base *ev_base, const char *conninfo
     // initial state
     conn->ev_base = ev_base;
     conn->user_cb = cb_info;
+    conn->user_cb_arg = cb_arg;
     conn->state = EVPQ_INIT;
 
     // create our PGconn
@@ -270,6 +272,10 @@ int evpq_query (struct evpq_conn *conn, const char *command) {
 
 error:
     return -1;
+}
+
+enum evpq_state evpq_state (struct evpq_conn *conn) {
+    return conn->state;
 }
 
 const PGconn *evpq_pgconn (struct evpq_conn *conn) {
