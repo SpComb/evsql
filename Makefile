@@ -40,8 +40,8 @@ clean :
 
 build/deps/%.d : src/%.c
 	@set -e; rm -f $@; \
-	 $(CC) -MM $(CPPFLAGS) $< > $@.$$$$; \
-	 sed 's,\($*\)\.o[ :]*,obj/\1.o $@ : ,g' < $@.$$$$ > $@; \
+	 $(CC) -MM -MT __ $(CPPFLAGS) $< > $@.$$$$; \
+	 sed 's,__[ :]*,obj/$*.o $@ : ,g' < $@.$$$$ > $@; \
 	 rm -f $@.$$$$
 
 include $(SRC_NAMES:%.c=build/deps/%.d)
