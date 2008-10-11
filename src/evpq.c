@@ -62,7 +62,7 @@ static int _evpq_query_result (struct evpq_conn *conn) {
         conn->state = EVPQ_CONNECTED;
 
         // tell the user the query is done
-        conn->user_cb.fn_done(conn, conn->user_c_arg);
+        conn->user_cb.fn_done(conn, conn->user_cb_arg);
 
         // stop waiting for more results
         return 1;

@@ -63,8 +63,6 @@ int main (int argc, char **argv) {
         .fn_result = cb_result,
         .fn_done = cb_done,
         .fn_failure = cb_failure,
-
-        .cb_arg = NULL,
     };
 
     // initialize libevent
@@ -72,7 +70,7 @@ int main (int argc, char **argv) {
         ERROR("event_base_new");
 
     // establish the evpq connection
-    if ((conn = evpq_connect(ev_base, conninfo, cb_info)) == NULL)
+    if ((conn = evpq_connect(ev_base, conninfo, cb_info, NULL)) == NULL)
         ERROR("evpq_connect");
 
     // run libevent
