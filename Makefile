@@ -9,7 +9,8 @@ LDLIBS = -levent -lfuse -lpq
 DEFINES = -D_FILE_OFFSET_BITS=64
 MY_CFLAGS = -Wall -g -std=gnu99
 
-BIN_NAMES = hello helloworld
+BIN_NAMES = helloworld hello simple_hello evpq_test url_test
+BIN_PATHS = $(addprefix bin/,$(BIN_NAMES))
 
 # first target
 all: ${BIN_PATHS}
@@ -26,11 +27,9 @@ LDFLAGS = ${LIBRARY_PATHS} ${LIBRARY_LIST}
 CFLAGSX = ${DEFINES} ${MY_CFLAGS}
 CFLAGS = ${INCLUDE_PATHS} ${CFLAGSX}
 
-SRC_PATHS = $(wildcard src/*.c)
+SRC_PATHS = $(wildcard src/*.c) $(wildcard src/*/*.c)
 SRC_NAMES = $(patsubst src/%,%,$(SRC_PATHS))
 SRC_DIRS = $(dir $(SRC_NAMES))
-
-BIN_PATHS = $(addprefix bin/,$(BIN_NAMES))
 
 # other targets
 clean :
