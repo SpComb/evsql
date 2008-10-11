@@ -249,15 +249,19 @@ error:
     return NULL;
 }
 
-int evpq_query (struct evpq_conn *conn, const char *command) {
-    // check state
+static int _evpq_check_query (struct evpq_conn *conn) {
+    // just check the state
     if (conn->state != EVPQ_CONNECTED)
         ERROR("invalid evpq state: %d", conn->state);
     
-    // do the query
-    if (PQsendQuery(conn->pg_conn, command) == 0)
-        ERROR("PQsendQuery: %s", PQerrorMessage(conn->pg_conn));
-    
+    // ok
+    return 0;
+
+error:
+    return -1;
+}
+
+static int _evpq_handle_query (struct evpq_conn *conn) {
     // update state
     conn->state = EVPQ_QUERY;
     
@@ -272,6 +276,47 @@ int evpq_query (struct evpq_conn *conn, const char *command) {
 
 error:
     return -1;
+}
+
+int evpq_query (struct evpq_conn *conn, const char *command) {
+    // check state
+    if (_evpq_check_query(conn))
+        goto error;
+    
+    // do the query
+    if (PQsendQuery(conn->pg_conn, command) == 0)
+        ERROR("PQsendQuery: %s", PQerrorMessage(conn->pg_conn));
+    
+    // handle it
+    if (_evpq_handle_query(con))
+        goto error;
+
+    // success
+    return 0;
+
+error:
+    return -1;
+}
+
+int evpq_query_params (struct evpq_conn *conn, const char *command, int nParams, const Oid *paramTypes, const char * const *paramValues, const int *paramLengths, const int *paramFormats, int resultFormat) {
+    // check state
+    if (_evpq_check_query(conn))
+        goto error;
+    
+    // do the query
+    if (PQsendQueryParams(conn->pg_conn, command, nParams, paramTypes, paramValues, paramLengths, paramFormats, resultFormat) == 0)
+        ERROR("PQsendQueryParams: %s", PQerrorMessage(conn->pg_conn));
+    
+    // handle it
+    if (_evpq_handle_query(con))
+        goto error;
+
+    // success
+    return 0;
+
+error:
+    return -1;
+
 }
 
 enum evpq_state evpq_state (struct evpq_conn *conn) {

@@ -36,6 +36,18 @@ struct evsql_query {
 
     // the actual SQL query, this may or may not be ours, see _evsql_query_exec
     char *command;
+    
+    // possible query params
+    struct evsql_query_param_info {
+        int count;
+
+        Oid *types;
+        const char **values;
+        int *lengths;
+        int *formats;
+
+        int result_format;
+    } params;
 
     // our callback
     evsql_query_cb cb_fn;
@@ -50,6 +62,7 @@ struct evsql_query {
     } result;
 };
 
+
 /*
  * Actually execute the given query.
  *
@@ -61,8 +74,21 @@ struct evsql_query {
 static int _evsql_query_exec (struct evsql *evsql, struct evsql_query *query, const char *command) {
     switch (evsql->type) {
         case EVSQL_EVPQ:
-            // just pass it through
-            return evpq_query(evsql->engine.evpq, command);
+            // got params?
+            if (query->params.count) {
+                return evpq_query_params(evsql->engine.evpq, command,
+                    query->params.count, 
+                    query->params.types, 
+                    query->params.values, 
+                    query->params.lengths, 
+                    query->params.formats, 
+                    query->params.result_format
+                );
+
+            } else {
+                // plain 'ole query
+                return evpq_query(evsql->engine.evpq, command);
+            }
         
         default:
             FATAL("evsql->type");
@@ -70,10 +96,25 @@ static int _evsql_query_exec (struct evsql *evsql, struct evsql_query *query, co
 }
 
 /*
+ * Free the query and related resources, doesn't trigger any callbacks or remove from any queues
+ */
+static void _evsql_query_free (struct evsql_query *query) {
+    assert(query->command == NULL);
+    
+    // free params if present
+    free(query->params.types);
+    free(query->params.values);
+    free(query->params.lengths);
+    free(query->params.formats);
+
+    // free the query itself
+    free(query);
+}
+
+/*
  * Dequeue the query, execute the callback, and free it.
  */
 static void _evsql_query_done (struct evsql_query *query, const struct evsql_result_info *result_info) {
-    assert(query->command == NULL);
 
     // dequeue
     TAILQ_REMOVE(&query->evsql->queue, query, entry);
@@ -83,7 +124,7 @@ static void _evsql_query_done (struct evsql_query *query, const struct evsql_res
         query->cb_fn(*result_info, query->cb_arg);
     
     // free
-    free(query);
+    _evsql_query_free(query);
 }
 
 /*
@@ -298,11 +339,9 @@ static int _evsql_query_idle (struct evsql *evsql) {
     }
 }
 
-
-struct evsql_query *evsql_query (struct evsql *evsql, const char *command, evsql_query_cb query_fn, void *cb_arg) {
+static struct evsql_query *_evsql_query_new (struct evsql *evsql, evsql_query_cb query_fn, void *cb_arg) {
     struct evsql_query *query;
-    int idle;
-
+    
     // allocate it
     if ((query = calloc(1, sizeof(*query))) == NULL)
         ERROR("calloc");
@@ -311,6 +350,16 @@ struct evsql_query *evsql_query (struct evsql *evsql, const char *command, evsql
     query->evsql = evsql;
     query->cb_fn = query_fn;
     query->cb_arg = cb_arg;
+
+    // success
+    return query;
+
+error:
+    return NULL;
+}
+
+static int _evsql_query_enqueue (struct evsql *evsql, struct evsql_query *query, const char *command) {
+    int idle;
     
     // check state
     if ((idle = _evsql_query_idle(evsql)) < 0)
@@ -331,14 +380,85 @@ struct evsql_query *evsql_query (struct evsql *evsql, const char *command, evsql
     
     // store it on the list
     TAILQ_INSERT_TAIL(&evsql->queue, query, entry);
+
+    // ok, good
+    return 0;
+
+error:
+    return -1;
+}
+
+struct evsql_query *evsql_query (struct evsql *evsql, const char *command, evsql_query_cb query_fn, void *cb_arg) {
+    struct evsql_query *query = NULL;
     
-    // success
+    // alloc new query
+    if ((query = _evsql_query_new(evsql, query_fn, cb_arg)) == NULL)
+        goto error;
+    
+    // just execute the command string directly
+    if (_evsql_query_enqueue(evsql, query, command))
+        goto error;
+
+    // ok
     return query;
 
 error:
-    // do *NOT* free query->command, ever
-    free(query);
+    _evsql_query_free(query);
 
+    return NULL;
+}
+
+struct evsql_query *evsql_query_params (struct evsql *evsql, const char *command, struct evsql_query_params params, evsql_query_cb query_fn, void *cb_arg) {
+    struct evsql_query *query = NULL;
+    struct evsql_query_param *param;
+    int idx;
+    
+    // alloc new query
+    if ((query = _evsql_query_new(evsql, query_fn, cb_arg)) == NULL)
+        goto error;
+
+    // count the params
+    for (param = params.list; param->value || param->length; param++) 
+        query->params.count++;
+
+    // allocate the vertical storage for the parameters
+    if (0
+        
+//            !(query->params.types    = calloc(query->params.count, sizeof(Oid)))
+        ||  !(query->params.values   = calloc(query->params.count, sizeof(char *)))
+        ||  !(query->params.lengths  = calloc(query->params.count, sizeof(int)))
+        ||  !(query->params.formats  = calloc(query->params.count, sizeof(int)))
+    )
+        ERROR("calloc");
+
+    // transform
+    for (param = params.list, idx = 0; param->value || param->length; param++, idx++) {
+        // `types` stays NULL
+        // query->params.types[idx] = 0;
+        
+        // values
+        query->params.values[idx] = param->value;
+
+        // lengths (nonzero for NULLs)
+        query->params.lengths[idx] = param->value ? param->length : 0;
+
+        // formats, binary if length is nonzero
+        query->params.formats[idx] = param->value && param->length;
+    }
+
+    // result format
+    query->params.result_format = params.result_binary ? 1 : 0;
+
+    // execute it
+    if (_evsql_query_enqueue(evsql, query, command))
+        goto error;
+
+    // ok
+    return query;
+
+error:
+    _evsql_query_free(query);
+    
     return NULL;
 }
 

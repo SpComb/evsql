@@ -80,6 +80,13 @@ struct evpq_conn *evpq_connect (struct event_base *ev_base, const char *conninfo
 int evpq_query (struct evpq_conn *conn, const char *command);
 
 /*
+ * Execute a query with params.
+ *
+ * See evpq_query and PQsendQueryParams/PQexecParams
+ */
+int evpq_query_params (struct evpq_conn *conn, const char *command, int nParams, const Oid *paramTypes, const char * const *paramValues, const int *paramLengths, const int *paramFormats, int resultFormat);
+
+/*
  * Connection state à la evpq.
  */
 enum evpq_state evpq_state (struct evpq_conn *conn);

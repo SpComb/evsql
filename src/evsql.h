@@ -20,15 +20,28 @@ struct evsql;
 struct evsql_query;
 
 /*
- * Query parameter info
- * /
+ * Query parameter info.
+ *
+ * Use the EVSQL_PARAM_* macros to define the value of list
+ */
 struct evsql_query_params {
-    int count;
-    const char * const *values;
-    const int *lengths;
-    const int *formats;
-    int result_format;
-}; */
+    // nonzero to get results in binary format
+    int result_binary;
+    
+    // the list of parameters, terminated by { 0, 0 }
+    struct evsql_query_param {
+        // the textual or binary value for this parameter
+        char *value;
+
+        // the explicit length of the parameter if it's binary. Must be non-zero for NULL values.
+        int length;
+    } list[];
+};
+
+// macros for defining evsql_query_params
+#define EVSQL_PARAM_NULL                    { NULL, 1 }
+#define EVSQL_PARAM_TEXT(value)             { value, 0 }
+#define EVSQL_PARAM_BINARY(value, length)   { value, length }
 
 /*
  * Result type
@@ -69,6 +82,11 @@ struct evsql *evsql_new_pq (struct event_base *ev_base, const char *pq_conninfo,
  * Queue the given query for execution.
  */
 struct evsql_query *evsql_query (struct evsql *evsql, const char *command, evsql_query_cb query_fn, void *cb_arg);
+
+/*
+ * Same, but uses the SQL-level support for binding parameters.
+ */
+struct evsql_query *evsql_query_params (struct evsql *evsql, const char *command, struct evsql_query_params params, evsql_query_cb query_fn, void *cb_arg);
 
 /*
  * Close a connection. Callbacks for waiting queries will not be run.
