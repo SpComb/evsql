@@ -87,12 +87,57 @@ error:
     return -1;
 }
 
-static int _url_append_opt_key (struct url *url, const char *key) {
-    return 0;
+static struct url_opt *_url_get_opt (struct url *url, int new) {
+    if (!url->opts) {
+        if ((url->opts = malloc(sizeof(struct url_opts) + (1 * sizeof(struct url_opt)))) == NULL)
+            ERROR("malloc");
+
+        url->opts->count = 1;
+
+    } else if (new) {
+        url->opts->count++;
+
+        if ((url->opts = realloc(url->opts, sizeof(struct url_opts) + url->opts->count * sizeof(struct url_opt))) == NULL)
+            ERROR("realloc");
+    }
+    
+    // success
+    return &url->opts->list[url->opts->count - 1];
+
+error:
+    return NULL;
 }
 
-static int _url_append_opt_val (struct url *url, const char *value) {
+static int _url_append_opt_key (struct url *url, const char *key) {
+    struct url_opt *opt;
+
+    if ((opt = _url_get_opt(url, 1)) == NULL)
+        goto error;
+
+    if ((opt->key = strdup(key)) == NULL)
+        ERROR("strdup");
+
+    opt->value = NULL;
+
     return 0;
+
+error:
+    return -1;
+} 
+
+static int _url_append_opt_val (struct url *url, const char *value) {
+    struct url_opt *opt;
+
+    if ((opt = _url_get_opt(url, 0)) == NULL)
+        goto error;
+
+    if ((opt->value = strdup(value)) == NULL)
+        ERROR("strdup");
+
+    return 0;
+
+error:
+    return -1;
 }
 
 static int url_lex_token (int _this_token, char *token_data, int _next_token, int _prev_token, void *arg);
@@ -115,13 +160,12 @@ static struct lex url_lex = {
         
         // this can be URL_SCHEME, URL_USERNAME or URL_HOSTNAME
         LEX_STATE_END ( URL_BEGIN_ALNUM ) {
-            LEX_ALNUM       (           URL_BEGIN_ALNUM         ),
             LEX_CHAR        (   '+',    URL_SCHEME_SEP          ),  // it was URL_SCHEME
             LEX_CHAR        (   ':',    URL_BEGIN_COLON         ), 
             LEX_CHAR        (   '@',    URL_USERNAME_END        ),  // it was URL_USERNAME
             LEX_CHAR        (   '/',    URL_PATH_START          ),  // it was URL_HOSTNAME
             LEX_CHAR        (   '?',    URL_OPT_START           ),  // it was URL_HOSTNAME
-            LEX_END
+            LEX_DEFAULT     (           URL_BEGIN_ALNUM         )
         },
         
         // this can be URL_SCHEME_END_COL, URL_USERNAME_END or URL_SERVICE_SEP

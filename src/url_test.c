@@ -9,7 +9,15 @@
 
 struct url_schema
     basic_http = { 1, { "http" } },
-    svn_ssh = { 2, { "svn", "ssh" } };
+    svn_ssh = { 2, { "svn", "ssh" } },
+    schema_unix = { 1, { "unix" } }
+    ;
+
+struct url_opts
+    opts_single = { 1, { { "key0", "val0" } } },
+    opts_multi = { 2, { { "key0", "val0" }, { "key1", "val1" } } },
+    opts_nullval = { 1, { { "keyN", NULL } } }
+    ;
 
 struct url_test {
     const char *url;
@@ -30,7 +38,31 @@ struct url_test {
     {   "user@:service/",   {
         NULL, "user", NULL, NULL, "service", NULL
     } },
-    
+
+    {   "unix:////tmp/foo.sock",    {
+        &schema_unix, NULL, NULL, NULL, NULL, "/tmp/foo.sock"
+    } },
+
+    {   "unix:///tmp/foo.sock", {
+        &schema_unix, NULL, NULL, NULL, NULL, "tmp/foo.sock"
+    } },
+
+    {   "/tmp/foo.sock",    {
+        NULL, NULL, NULL, NULL, NULL, "tmp/foo.sock"
+    } },
+
+    {   "?key0=val0",   {
+        NULL, NULL, NULL, NULL, NULL, NULL, &opts_single
+    } },
+
+    {   "http://foo.com/index.php?key0=val0&key1=val1",  {
+        &basic_http, NULL, NULL, "foo.com", NULL, "index.php", &opts_multi
+    } },
+
+    {   "example.org:81/?keyN", {
+        NULL, NULL, NULL, "example.org", "81", NULL, &opts_nullval
+    } },
+
     {   NULL,               {   } },
 };
 
@@ -105,11 +137,11 @@ int cmp_url (const struct url *test, const struct url *real) {
             FAIL("inconsistent opts count");
         
         for (i = 0; i < test->opts->count; i++) {
-            if (strcmp(test->opts->list[i].key, real->opts->list[i].key) != 0)
-                FAIL("differing scheme key #%d", i);
+            if (cmp_url_str("opt key", test->opts->list[i].key, real->opts->list[i].key))
+                FAIL("differing opt key #%d", i);
             
-            if (strcmp(test->opts->list[i].value, real->opts->list[i].value) != 0)
-                FAIL("differing scheme value #%d", i);
+            if (cmp_url_str("opt value", test->opts->list[i].value, real->opts->list[i].value))
+                FAIL("differing opt value #%d", i);
         }
     }
 
@@ -159,6 +191,8 @@ int main (int argc, char **argv) {
             printf("OK\n\t");
             url_dump(&url, stdout);
         }
+
+        printf("\n");
     }
 }
 

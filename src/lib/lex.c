@@ -39,7 +39,7 @@ int lexer (const struct lex *lex, const char *input, void *arg) {
     do {
         if (*c) {
             // look up the next state
-            for (trans = lex->state_list[cur_state - 1].trans_list; trans->next_state > 0; trans++) {
+            for (trans = lex->state_list[cur_state - 1].trans_list; trans->next_state > 0 || trans->flags; trans++) {
                 // accept defaults
                 if (trans->flags & LEX_TRANS_DEFAULT)
                     break;
@@ -49,10 +49,10 @@ int lexer (const struct lex *lex, const char *input, void *arg) {
                     continue;
                 
                 // abort on invalids
-                if (trans->flags & LEX_TRANS_INVALID)
+                if (trans->flags & LEX_TRANS_INVALID) {
                     goto error;
                 
-                else {
+                } else {
                     // accept it
                     break;
                 }
