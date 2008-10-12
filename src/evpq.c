@@ -239,12 +239,8 @@ struct evpq_conn *evpq_connect (struct event_base *ev_base, const char *conninfo
     return conn;
 
 error:
-    if (conn) {
-        if (conn->pg_conn)
-            PQfinish(conn->pg_conn);
-        
-        free(conn);
-    }
+    if (conn) 
+        evpq_release(conn);
 
     return NULL;
 }
@@ -317,6 +313,16 @@ int evpq_query_params (struct evpq_conn *conn, const char *command, int nParams,
 error:
     return -1;
 
+}
+
+void evpq_release (struct evpq_conn *conn) {
+    if (conn->ev)
+        event_free(conn->ev);
+
+    if (conn->pg_conn)
+        PQfinish(conn->pg_conn);
+    
+    free(conn);
 }
 
 enum evpq_state evpq_state (struct evpq_conn *conn) {

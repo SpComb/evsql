@@ -101,5 +101,11 @@ const PGconn *evpq_pgconn (struct evpq_conn *conn);
 // convenience wrappers
 #define evpq_error_message(conn) PQerrorMessage(evpq_pgconn(conn))
 
+/*
+ * Release the evpq_conn, closing all connections and freeing all resources.
+ *
+ * You must call this yourself in all cases after evpq_connect returns an evpq_conn.
+ */
+void evpq_release (struct evpq_conn *conn);
 
 #endif /* EVPQ_H */

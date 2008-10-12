@@ -20,6 +20,22 @@ struct evsql;
 struct evsql_query;
 
 /*
+ * Transaction handle
+ */
+struct evsql_trans;
+
+/*
+ * Transaction type
+ */
+enum evsql_trans_type {
+    EVSQL_TRANS_DEFAULT,
+    EVSQL_TRANS_SERIALIZABLE,
+    EVSQL_TRANS_REPEATABLE_READ,
+    EVSQL_TRANS_READ_COMMITTED,
+    EVSQL_TRANS_READ_UNCOMMITTED,
+};
+
+/*
  * Parameter type
  */
 enum evsql_param_format {
@@ -77,48 +93,79 @@ struct evsql_query_params {
 /*
  * Result type
  */
-union evsql_result {
-    // libpq
-    PGresult *pq;
-};
-
 struct evsql_result_info {
     struct evsql *evsql;
+    struct evsql_trans *trans;
     
     int error;
 
-    union evsql_result result;
+    union evsql_result {
+        // libpq
+        PGresult *pq;
+    } result;
 };
 
 /*
- * Callback for handling query-level errors.
+ * Callback for handling query results.
  *
- * The query has completed, either succesfully or unsuccesfully (look at info.error).
- * info.result contains the result à la the evsql's type.
+ * The query has completed, either succesfully or unsuccesfully (nonzero .error).
+ *
+ * Use the evsql_result_* functions to manipulate the results.
  */
 typedef void (*evsql_query_cb)(const struct evsql_result_info *res, void *arg);
 
 /*
- * Callback for handling connection-level errors.
+ * Callback for handling global-level errors.
  *
- * The SQL context/connection suffered an error. It is not valid anymore, and may not be used.
+ * The evsql is not useable anymore.
+ *
+ * XXX: this is not actually called yet, no retry logic implemented.
  */
 typedef void (*evsql_error_cb)(struct evsql *evsql, void *arg);
 
 /*
+ * Callback for handling transaction-level errors.
+ *
+ * The transaction is not useable anymore.
+ */
+typedef void (*evsql_trans_error_cb)(struct evsql_trans *trans, void *arg);
+
+/*
+ * The transaction is ready for use.
+ */
+typedef void (*evsql_trans_ready_cb)(struct evsql_trans *trans, void *arg);
+
+/*
  * Create a new PostgreSQL/libpq(evpq) -based evsql using the given conninfo.
+ *
+ * The given conninfo must stay valid for the duration of the evsql's lifetime.
  */
 struct evsql *evsql_new_pq (struct event_base *ev_base, const char *pq_conninfo, evsql_error_cb error_fn, void *cb_arg);
 
 /*
- * Queue the given query for execution.
+ * Create a new transaction.
+ *
+ * Transactions are separate connections that provide transaction-isolation.
+ *
+ * Once the transaction is ready for use, ready_fn will be called. If the transaction fails, any pending query will be forgotten, and error_fn called.
  */
-struct evsql_query *evsql_query (struct evsql *evsql, const char *command, evsql_query_cb query_fn, void *cb_arg);
+struct evsql_trans *evsql_trans (struct evsql *evsql, enum evsql_trans_type type, evsql_trans_error_cb error_fn, evsql_trans_ready_cb ready_fn, void *cb_arg);
 
 /*
- * Same, but uses the SQL-level support for binding parameters.
+ * Queue the given query for execution.
+ *
+ * If trans is specified (not NULL), then the transaction must be idle, and the query will be executed in that
+ * transaction's context. Otherwise, the query will be executed without a transaction, andmay be executed immediately,
+ * or if other similar queries are running, it will be queued for later execution.
+ *
+ * Once the query is complete (got a result, got an error, the connection failed), then the query_cb will be triggered.
  */
-struct evsql_query *evsql_query_params (struct evsql *evsql, const char *command, const struct evsql_query_params *params, evsql_query_cb query_fn, void *cb_arg);
+struct evsql_query *evsql_query (struct evsql *evsql, struct evsql_trans *trans, const char *command, evsql_query_cb query_fn, void *cb_arg);
+
+/*
+ * Same as evsql_query, but uses the SQL-level support for binding parameters.
+ */
+struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans *trans, const char *command, const struct evsql_query_params *params, evsql_query_cb query_fn, void *cb_arg);
 
 /*
  * Param-building functions
