@@ -22,6 +22,19 @@ error:
     return -1;
 }
 
+size_t difbuf_estimate (size_t req_size, size_t min_namelen) {
+    char namebuf[DIRBUF_NAME_MAX];
+    int i;
+    
+    // build a dummy string of the right length
+    for (i = 0; i < min_namelen && i < DIRBUF_NAME_MAX - 1; i++)
+        namebuf[i] = 'x';
+
+    namebuf[i] = '\0';
+
+    return req_size / (fuse_add_direntry(NULL, NULL, 0, namebuf, NULL, 0));
+}
+
 int dirbuf_add (fuse_req_t req, off_t req_off, struct dirbuf *buf, off_t ent_off, off_t next_off, const char *ent_name, fuse_ino_t ent_ino, mode_t ent_mode) {
     struct stat stbuf;
     size_t ent_size;

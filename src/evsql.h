@@ -136,6 +136,11 @@ typedef void (*evsql_trans_error_cb)(struct evsql_trans *trans, void *arg);
 typedef void (*evsql_trans_ready_cb)(struct evsql_trans *trans, void *arg);
 
 /*
+ * The transaction was commited, and should not be used anymore.
+ */
+typedef void (*evsql_trans_done_cb)(struct evsql_trans *trans, void *arg);
+
+/*
  * Create a new PostgreSQL/libpq(evpq) -based evsql using the given conninfo.
  *
  * The given conninfo must stay valid for the duration of the evsql's lifetime.
@@ -147,9 +152,11 @@ struct evsql *evsql_new_pq (struct event_base *ev_base, const char *pq_conninfo,
  *
  * Transactions are separate connections that provide transaction-isolation.
  *
- * Once the transaction is ready for use, ready_fn will be called. If the transaction fails, any pending query will be forgotten, and error_fn called.
+ * Once the transaction is ready for use, ready_fn will be called. If the transaction fails, any pending query will be
+ * forgotten, and error_fn called. This also includes some (but not all) cases where evsql_query returns nonzero.
+ *
  */
-struct evsql_trans *evsql_trans (struct evsql *evsql, enum evsql_trans_type type, evsql_trans_error_cb error_fn, evsql_trans_ready_cb ready_fn, void *cb_arg);
+struct evsql_trans *evsql_trans (struct evsql *evsql, enum evsql_trans_type type, evsql_trans_error_cb error_fn, evsql_trans_ready_cb ready_fn, evsql_trans_done_cb done_fn, void *cb_arg);
 
 /*
  * Queue the given query for execution.
@@ -166,6 +173,26 @@ struct evsql_query *evsql_query (struct evsql *evsql, struct evsql_trans *trans,
  * Same as evsql_query, but uses the SQL-level support for binding parameters.
  */
 struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans *trans, const char *command, const struct evsql_query_params *params, evsql_query_cb query_fn, void *cb_arg);
+
+/*
+ * Commit a transaction, calling done_fn if it was succesfull (error_fn otherwise).
+ */
+int evsql_trans_commit (struct evsql_trans *trans);
+
+/*
+ * Abort a transaction, rolling it back. No callbacks will be called, unless this function returns nonzero, in which
+ * case error_fn might be called.
+ */
+int evsql_trans_abort (struct evsql_trans *trans);
+
+/*
+ * Transaction-handling functions
+ */
+
+// error string, meant to be called from evsql_trans_error_cb
+const char *evsql_trans_error (struct evsql_trans *trans);
+
+// commit the transaction, calling 
 
 /*
  * Param-building functions

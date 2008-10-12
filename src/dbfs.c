@@ -3,8 +3,10 @@
  * A simple PostgreSQL-based filesystem.
  */
 
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <event2/event.h>
 
@@ -276,6 +278,193 @@ error:
         EWARNING(err, "fuse_reply_err");
 }
 
+struct dbfs_dirop {
+    struct fuse_file_info *fi;
+    struct fuse_req *req;
+
+    struct evsql_trans *trans;
+    
+    // opendir has returned and releasedir hasn't been called yet
+    int open;
+};
+
+/*
+ * Free the dirop, aborting any in-progress transaction.
+ *
+ * req must be NULL.
+ */
+static void dbfs_dirop_free (struct dbfs_dirop *dirop) {
+    assert(dirop->req == NULL);
+
+    if (dirop->trans)
+        evsql_trans_abort(dirop->trans);
+
+    free(dirop);
+}
+
+/*
+ * The opendir transaction is ready
+ */
+static void dbfs_dirop_ready (struct evsql_trans *trans, void *arg) {
+    struct dbfs_dirop *dirop = arg;
+    struct fuse_req *req = dirop->req; dirop->req = NULL;
+    int err;
+
+    INFO("[dbfs.openddir %p:%p] -> trans=%p", dirop, req, trans);
+
+    // remember the transaction
+    dirop->trans = trans;
+
+    // send the openddir reply
+    if ((err = fuse_reply_open(dirop->req, dirop->fi)))
+        EERROR(err, "fuse_reply_open");
+    
+    // dirop is now open
+    dirop->open = 1;
+
+    // ok, wait for the next fs req
+    return;
+
+error:
+    dbfs_dirop_free(dirop);
+
+    if ((err = fuse_reply_err(req, err)))
+        EWARNING(err, "fuse_reply_err");
+}
+
+static void dbfs_dirop_done (struct evsql_trans *trans, void *arg) {
+    struct dbfs_dirop *dirop = arg;
+    int err;
+    
+
+}
+
+static void dbfs_dirop_error (struct evsql_trans *trans, void *arg) {
+    struct dbfs_dirop *dirop = arg;
+    int err;
+
+    INFO("[dbfs:dirop %p:%p] evsql transaction error: %s", dirop, dirop->req, evsql_trans_error(trans));
+    
+    // deassociate the trans
+    dirop->trans = NULL;
+    
+    // error out and pending req
+    if (dirop->req) {
+        if ((err = fuse_reply_err(dirop->req, EIO)))
+            EWARNING(err, "fuse_erply_err");
+
+        dirop->req = NULL;
+
+        // only free the dirop if it isn't open
+        if (!dirop->open)
+            dbfs_dirop_free(dirop);
+    }
+}
+
+static void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi) {
+    struct dbfs *ctx = fuse_req_userdata(req);
+    struct dbfs_dirop *dirop = NULL;
+    int err;
+    
+    // allocate it
+    if ((dirop = calloc(1, sizeof(*dirop))) == NULL && (err = EIO))
+        ERROR("calloc");
+
+    INFO("[dbfs.opendir %p:%p] ino=%lu, fi=%p", dirop, req, ino, fi);
+        
+    // store the dirop
+    fi->fh = (uint64_t) dirop;
+    dirop->req = req;
+    dirop->fi = fi;
+
+    // start a new transaction
+    if (evsql_trans(ctx->db, EVSQL_TRANS_SERIALIZABLE, dbfs_dirop_error, dbfs_dirop_ready, dbfs_dirop_done, dirop))
+        SERROR(err = EIO);
+    
+    // XXX: handle interrupts
+    
+    // wait
+    return;
+
+error:
+    // we handle the req
+    dirop->req = NULL;
+
+    dbfs_dirop_free(dirop);
+
+    if ((err = fuse_reply_err(req, err)))
+        EWARNING(err, "fuse_reply_err");
+}
+
+static void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi) {
+    struct dbfs *ctx = fuse_req_userdata(req);
+    struct dbfs_dirop *dirop = (struct dbfs_dirop *) fi->fh;
+    int err;
+
+    INFO("[dbfs.readdir %p:%p] ino=%lu, size=%zu, off=%zu, fi=%p : trans=%p", dirop, req, ino, size, off, fi, dirop->trans);
+
+    // update dirop
+    dirop->req = req;
+    assert(dirop->fi == fi);
+
+    // select all relevant file entries
+    const char *sql = 
+        "SELECT"
+        " \"file_tree.offset\", file_tree.name, inodes.ino, inodes.type"
+        " FROM file_tree LEFT OUTER JOIN inodes ON (file_tree.inode = inodes.ino)"
+        " WHERE file_tree.parent = $1::int4 AND \"file_tree.offset\" >= $2::int4"
+        " LIMIT $3::int4";
+
+    static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
+        EVSQL_PARAM ( UINT32 ),
+        EVSQL_PARAM ( UINT32 ),
+        EVSQL_PARAM ( UINT32 ),
+
+        EVSQL_PARAMS_END
+    };
+
+    // XXX: incomplete
+}
+
+static void dbfs_releasedir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi) {
+    struct dbfs *ctx = fuse_req_userdata(req);
+    struct dbfs_dirop *dirop = (struct dbfs_dirop *) fi->fh;
+    int err;
+
+    (void) ctx;
+
+    INFO("[dbfs.releasedir %p:%p] ino=%lu, fi=%p : trans=%p", dirop, req, ino, fi, dirop->trans);
+
+    // update dirop. Must keep it open so that dbfs_dirop_error won't free it
+    dirop->req = req;
+    assert(dirop->fi == fi);
+
+    // we can commit the transaction, although we didn't make any changes
+    // if this fails the transaction, then dbfs_dirop_error will take care of sending the error, and dirop->req will be
+    // NULL
+    if (evsql_trans_commit(dirop->trans))
+        SERROR(err = EIO);
+
+    // not open anymore
+    dirop->open = 0;
+
+    // XXX: handle interrupts
+    
+    // wait
+    return;
+
+error:
+    if (dirop->req) {
+        // we handle the req
+        dirop->req = NULL;
+
+        dbfs_dirop_free(dirop);
+
+        if ((err = fuse_reply_err(req, err)))
+            EWARNING(err, "fuse_reply_err");
+    }
+}
+
 struct fuse_lowlevel_ops dbfs_llops = {
 
     .init           = dbfs_init,
@@ -284,6 +473,9 @@ struct fuse_lowlevel_ops dbfs_llops = {
     .lookup         = dbfs_lookup,
 
     .getattr        = dbfs_getattr,
+
+    .opendir        = dbfs_opendir,
+    .releasedir     = dbfs_releasedir,
 };
 
 void dbfs_sql_error (struct evsql *evsql, void *arg) {

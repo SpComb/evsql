@@ -2,6 +2,7 @@
 
 #include "evsql.h"
 #include "evsql_internal.h"
+#include "evpq.h"
 #include "lib/error.h"
 #include "lib/misc.h"
 
@@ -168,3 +169,24 @@ void evsql_result_free (const struct evsql_result_info *res) {
             FATAL("res->evsql->type");
     }
 }
+
+const char *evsql_conn_error (struct evsql_conn *conn) {
+    switch (conn->evsql->type) {
+        case EVSQL_EVPQ:
+            if (!conn->engine.evpq)
+                return "unknown error (no conn)";
+            
+            return evpq_error_message(conn->engine.evpq);
+
+        default:
+            FATAL("res->evsql->type");
+    }
+}
+
+const char *evsql_trans_error (struct evsql_trans *trans) {
+    if (trans->conn == NULL)
+        return "unknown error (no trans conn)";
+
+    return evsql_conn_error(trans->conn);
+}
+

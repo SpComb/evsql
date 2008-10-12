@@ -69,12 +69,13 @@ struct evsql_conn {
  */
 struct evsql_trans {
     // our evsql_conn/evsql
-    //struct evsql *evsql;
+    struct evsql *evsql;
     struct evsql_conn *conn;
     
     // callbacks
     evsql_trans_error_cb error_fn;
     evsql_trans_ready_cb ready_fn;
+    evsql_trans_done_cb done_fn;
     void *cb_arg;
 
     // the transaction type

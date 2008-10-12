@@ -16,6 +16,13 @@ struct dirbuf {
     size_t off;
 };
 
+// maximum length for a dirbuf name, including NUL byte
+#define DIRBUF_NAME_MAX 256
+
+/*
+ * Estimate how many dir entries will, at most, fit into a difbuf of the given size, based on a minimum filename size.
+ */
+size_t difbuf_estimate (size_t req_size, size_t min_namelen);
 
 /*
  * Initialize a dirbuf for a request. The dirbuf will be filled with at most req_size bytes of dir entries.
