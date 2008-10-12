@@ -1,0 +1,19 @@
+
+Just a simple pure-data filesystem stored in a SQL database. Implementation using PostgreSQL.
+No weird dynamic magic.
+
+
+file_tree:
+    offset              serial4                 ephemeral counter used to tell one file entry from another
+    name                varchar(256)            the filename
+    parent              int4 -> inodes.ino      file entry's parent
+    inode               int4 -> inodes.ino      the file's data
+
+inodes:
+    ino                 serial4                 inode number
+    type                char(3)
+            REG                         normal file
+            DIR                         directory
+    mode                int2                    file access modes 
+    size                int8                    file content size (?)
+

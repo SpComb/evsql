@@ -9,7 +9,7 @@ LDLIBS = -levent -lfuse -lpq
 DEFINES = -D_FILE_OFFSET_BITS=64
 MY_CFLAGS = -Wall -g -std=gnu99
 
-BIN_NAMES = helloworld hello simple_hello evpq_test url_test
+BIN_NAMES = helloworld hello simple_hello evpq_test url_test dbfs
 BIN_PATHS = $(addprefix bin/,$(BIN_NAMES))
 
 # first target
@@ -21,6 +21,7 @@ bin/hello: obj/evfuse.o obj/dirbuf.o obj/lib/log.o obj/lib/signals.o
 bin/simple_hello: obj/evfuse.o obj/dirbuf.o obj/lib/log.o obj/lib/signals.o obj/simple.o
 bin/evpq_test: obj/evpq.o obj/lib/log.o
 bin/url_test: obj/lib/url.o obj/lib/lex.o obj/lib/log.o
+bin/dbfs: obj/evsql.o obj/evpq.o obj/evfuse.o obj/dirbuf.o obj/lib/log.o obj/lib/signals.o
 
 # computed
 LDFLAGS = ${LIBRARY_PATHS} ${LIBRARY_LIST}

@@ -114,14 +114,13 @@ static void _evsql_query_free (struct evsql_query *query) {
 /*
  * Dequeue the query, execute the callback, and free it.
  */
-static void _evsql_query_done (struct evsql_query *query, const struct evsql_result_info *result_info) {
-
+static void _evsql_query_done (struct evsql_query *query, const struct evsql_result_info *res) {
     // dequeue
     TAILQ_REMOVE(&query->evsql->queue, query, entry);
     
-    if (result_info) 
+    if (res) 
         // call the callback
-        query->cb_fn(*result_info, query->cb_arg);
+        query->cb_fn(res, query->cb_arg);
     
     // free
     _evsql_query_free(query);
@@ -131,14 +130,14 @@ static void _evsql_query_done (struct evsql_query *query, const struct evsql_res
  * A query has failed, notify the user and remove it.
  */
 static void _evsql_query_failure (struct evsql *evsql, struct evsql_query *query) {
-    struct evsql_result_info result; ZINIT(result);
+    struct evsql_result_info res; ZINIT(res);
 
     // set up the result_info
-    result.evsql = evsql;
-    result.error = 1;
+    res.evsql = evsql;
+    res.error = 1;
 
     // finish it off
-    _evsql_query_done(query, &result);
+    _evsql_query_done(query, &res);
 }
 
 /*
@@ -146,18 +145,18 @@ static void _evsql_query_failure (struct evsql *evsql, struct evsql_query *query
  *
  * If result_info is given, each query will also recieve it via their callback, and the error_fn will be called.
  */
-static void _evsql_destroy (struct evsql *evsql, const struct evsql_result_info *result_info) {
+static void _evsql_destroy (struct evsql *evsql, const struct evsql_result_info *res) {
     struct evsql_query *query;
     
     // clear the queue
     while ((query = TAILQ_FIRST(&evsql->queue)) != NULL) {
-        _evsql_query_done(query, result_info);
+        _evsql_query_done(query, res);
         
         TAILQ_REMOVE(&evsql->queue, query, entry);
     }
     
     // do the error callback if required
-    if (result_info)
+    if (res)
         evsql->error_fn(evsql, evsql->cb_arg);
     
     // free
@@ -214,27 +213,32 @@ static void _evsql_evpq_result (struct evpq_conn *conn, PGresult *result, void *
 static void _evsql_evpq_done (struct evpq_conn *conn, void *arg) {
     struct evsql *evsql = arg;
     struct evsql_query *query;
-    struct evsql_result_info result; ZINIT(result);
+    struct evsql_result_info res; ZINIT(res);
 
     assert((query = TAILQ_FIRST(&evsql->queue)) != NULL);
     
     // set up the result_info
-    result.evsql = evsql;
+    res.evsql = evsql;
     
     if (query->result.evpq == NULL) {
         // if a query didn't return any results (bug?), warn and fail the query
         WARNING("[evsql] evpq query didn't return any results");
 
-        result.error = 1;
+        res.error = 1;
+    
+    } else if (strcmp(PQresultErrorMessage(query->result.evpq), "") != 0) {
+        // the query failed with some error
+        res.error = 1;
+        res.result.pq = query->result.evpq;
 
     } else {
-        result.error = 0;
-        result.result.pq = query->result.evpq;
+        res.error = 0;
+        res.result.pq = query->result.evpq;
 
     }
 
     // finish it off
-    _evsql_query_done(query, &result);
+    _evsql_query_done(query, &res);
 
     // pump the next one
     _evsql_pump(evsql);
@@ -311,7 +315,7 @@ error:
  *      0       connection idle, can query immediately
  *      1       connection busy, must queue query
  */
-static int _evsql_query_idle (struct evsql *evsql) {
+static int _evsql_query_busy (struct evsql *evsql) {
     switch (evsql->type) {
         case EVSQL_EVPQ: {
             enum evpq_state state = evpq_state(evsql->engine.evpq);
@@ -359,23 +363,24 @@ error:
 }
 
 static int _evsql_query_enqueue (struct evsql *evsql, struct evsql_query *query, const char *command) {
-    int idle;
+    int busy;
     
     // check state
-    if ((idle = _evsql_query_idle(evsql)) < 0)
+    if ((busy = _evsql_query_busy(evsql)) < 0)
         ERROR("connection is not valid");
     
-    if (idle) {
+    if (busy) {
+        // copy the command for later execution
+        if ((query->command = strdup(command)) == NULL)
+            ERROR("strdup");
+
+    } else {
         assert(TAILQ_EMPTY(&evsql->queue));
 
         // execute directly
         if (_evsql_query_exec(evsql, query, command))
             goto error;
 
-    } else {
-        // copy the command for later execution
-        if ((query->command = strdup(command)) == NULL)
-            ERROR("strdup");
     }
     
     // store it on the list
@@ -408,9 +413,9 @@ error:
     return NULL;
 }
 
-struct evsql_query *evsql_query_params (struct evsql *evsql, const char *command, struct evsql_query_params params, evsql_query_cb query_fn, void *cb_arg) {
+struct evsql_query *evsql_query_params (struct evsql *evsql, const char *command, const struct evsql_query_params *params, evsql_query_cb query_fn, void *cb_arg) {
     struct evsql_query *query = NULL;
-    struct evsql_query_param *param;
+    const struct evsql_query_param *param;
     int idx;
     
     // alloc new query
@@ -418,7 +423,7 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, const char *command
         goto error;
 
     // count the params
-    for (param = params.list; param->value || param->length; param++) 
+    for (param = params->list; param->type; param++) 
         query->params.count++;
 
     // allocate the vertical storage for the parameters
@@ -432,22 +437,31 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, const char *command
         ERROR("calloc");
 
     // transform
-    for (param = params.list, idx = 0; param->value || param->length; param++, idx++) {
+    for (param = params->list, idx = 0; param->type; param++, idx++) {
         // `types` stays NULL
         // query->params.types[idx] = 0;
         
         // values
-        query->params.values[idx] = param->value;
+        query->params.values[idx] = param->data_raw;
 
-        // lengths (nonzero for NULLs)
-        query->params.lengths[idx] = param->value ? param->length : 0;
+        // lengths
+        query->params.lengths[idx] = param->length;
 
         // formats, binary if length is nonzero
-        query->params.formats[idx] = param->value && param->length;
+        query->params.formats[idx] = param->length ? 1 : 0;
     }
 
     // result format
-    query->params.result_format = params.result_binary ? 1 : 0;
+    switch (params->result_fmt) {
+        case EVSQL_FMT_TEXT:
+            query->params.result_format = 0; break;
+
+        case EVSQL_FMT_BINARY:
+            query->params.result_format = 1; break;
+
+        default:
+            FATAL("params.result_fmt: %d", params->result_fmt);
+    }
 
     // execute it
     if (_evsql_query_enqueue(evsql, query, command))
@@ -462,3 +476,166 @@ error:
     return NULL;
 }
 
+int evsql_param_string (struct evsql_query_params *params, size_t param, const char *ptr) {
+    struct evsql_query_param *p = &params->list[param];
+    
+    assert(p->type == EVSQL_PARAM_STRING);
+
+    p->data_raw = ptr;
+    p->length = 0;
+
+    return 0;
+}
+
+int evsql_param_uint32 (struct evsql_query_params *params, size_t param, uint32_t uval) {
+    struct evsql_query_param *p = &params->list[param];
+    
+    assert(p->type == EVSQL_PARAM_UINT32);
+
+    p->data.uint32 = htonl(uval);
+    p->data_raw = (const char *) &p->data.uint32;
+    p->length = sizeof(uval);
+
+    return 0;
+}
+
+const char *evsql_result_error (const struct evsql_result_info *res) {
+    if (!res->error)
+        return "No error";
+
+    switch (res->evsql->type) {
+        case EVSQL_EVPQ:
+            if (!res->result.pq)
+                return "unknown error (no result)";
+            
+            return PQresultErrorMessage(res->result.pq);
+
+        default:
+            FATAL("res->evsql->type");
+    }
+
+}
+
+size_t evsql_result_rows (const struct evsql_result_info *res) {
+    switch (res->evsql->type) {
+        case EVSQL_EVPQ:
+            return PQntuples(res->result.pq);
+
+        default:
+            FATAL("res->evsql->type");
+    }
+}
+
+size_t evsql_result_cols (const struct evsql_result_info *res) {
+    switch (res->evsql->type) {
+        case EVSQL_EVPQ:
+            return PQnfields(res->result.pq);
+
+        default:
+            FATAL("res->evsql->type");
+    }
+}
+
+int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t size, int nullok) {
+    *ptr = NULL;
+
+    switch (res->evsql->type) {
+        case EVSQL_EVPQ:
+            if (PQgetisnull(res->result.pq, row, col)) {
+                if (nullok)
+                    return 0;
+                else
+                    ERROR("[%zu:%zu] field is null", row, col);
+            }
+
+            if (PQfformat(res->result.pq, col) != 1)
+                ERROR("[%zu:%zu] PQfformat is not binary: %d", row, col, PQfformat(res->result.pq, col));
+    
+            if (size && PQgetlength(res->result.pq, row, col) != size)
+                ERROR("[%zu:%zu] field size mismatch: %zu -> %d", row, col, size, PQgetlength(res->result.pq, row, col));
+
+            *ptr = PQgetvalue(res->result.pq, row, col);
+
+            return 0;
+
+        default:
+            FATAL("res->evsql->type");
+    }
+
+error:
+    return -1;
+}
+
+int evsql_result_string (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, int nullok) {
+    return evsql_result_binary(res, row, col, ptr, 0, nullok);
+}
+
+int evsql_result_uint16 (const struct evsql_result_info *res, size_t row, size_t col, uint16_t *uval, int nullok) {
+    const char *data;
+    int16_t sval;
+
+    if (evsql_result_binary(res, row, col, &data, sizeof(*uval), nullok))
+        goto error;
+
+    sval = ntohs(*((int16_t *) data));
+
+    if (sval < 0)
+        ERROR("negative value for unsigned: %d", sval);
+
+    *uval = sval;
+    
+    return 0;
+
+error:
+    return nullok ? 0 : -1;
+}
+
+int evsql_result_uint32 (const struct evsql_result_info *res, size_t row, size_t col, uint32_t *uval, int nullok) {
+    const char *data;
+    int32_t sval;
+
+    if (evsql_result_binary(res, row, col, &data, sizeof(*uval), nullok))
+        goto error;
+
+    sval = ntohl(*(int32_t *) data);
+
+    if (sval < 0)
+        ERROR("negative value for unsigned: %d", sval);
+
+    *uval = sval;
+    
+    return 0;
+
+error:
+    return nullok ? 0 : -1;
+}
+
+int evsql_result_uint64 (const struct evsql_result_info *res, size_t row, size_t col, uint64_t *uval, int nullok) {
+    const char *data;
+    int64_t sval;
+
+    if (evsql_result_binary(res, row, col, &data, sizeof(*uval), nullok))
+        goto error;
+
+    sval = ntohq(*(int64_t *) data);
+
+    if (sval < 0)
+        ERROR("negative value for unsigned: %ld", sval);
+
+    *uval = sval;
+    
+    return 0;
+
+error:
+    return nullok ? 0 : -1;
+}
+
+void evsql_result_free (const struct evsql_result_info *res) {
+    switch (res->evsql->type) {
+        case EVSQL_EVPQ:
+            return PQclear(res->result.pq);
+
+        default:
+            FATAL("res->evsql->type");
+    }
+}

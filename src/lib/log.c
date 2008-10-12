@@ -15,7 +15,7 @@ static void _generic_err_vargs (int flags, const char *func, int err, const char
     vfprintf(stream, fmt, va);
     
     if (flags & LOG_DISPLAY_PERR)
-        fprintf(stream, ": %s\n", strerror(err == 0 ? errno : -err));
+        fprintf(stream, ": %s\n", strerror(err == 0 ? errno : err));
     
     if (!(flags & LOG_DISPLAY_NONL))
         fprintf(stream, "\n");

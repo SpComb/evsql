@@ -41,6 +41,7 @@ extern enum _debug_level _cur_debug_level;
 #define perr(...)                   _generic_err(       LOG_DISPLAY_STDERR | LOG_DISPLAY_PERR,  NULL, 0,    __VA_ARGS__ )
 #define perr_exit(...)              _generic_err_exit(  LOG_DISPLAY_STDERR | LOG_DISPLAY_PERR,  NULL, 0,    __VA_ARGS__ )
 #define err_func(func, ...)         _generic_err(       LOG_DISPLAY_STDERR,                     func, 0,    __VA_ARGS__ )
+#define err_func_nonl(func, ...)    _generic_err(       LOG_DISPLAY_STDERR | LOG_DISPLAY_NONL,  func, 0,    __VA_ARGS__ )
 #define err_func_exit(func, ...)    _generic_err_exit(  LOG_DISPLAY_STDERR,                     func, 0,    __VA_ARGS__ )
 #define perr_func(func, ...)        _generic_err(       LOG_DISPLAY_STDERR | LOG_DISPLAY_PERR,  func, 0,    __VA_ARGS__ )
 #define perr_func_exit(func, ...)   _generic_err_exit(  LOG_DISPLAY_STDERR | LOG_DISPLAY_PERR,  func, 0,    __VA_ARGS__ )

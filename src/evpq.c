@@ -288,7 +288,7 @@ int evpq_query (struct evpq_conn *conn, const char *command) {
         ERROR("PQsendQuery: %s", PQerrorMessage(conn->pg_conn));
     
     // handle it
-    if (_evpq_handle_query(con))
+    if (_evpq_handle_query(conn))
         goto error;
 
     // success
@@ -308,7 +308,7 @@ int evpq_query_params (struct evpq_conn *conn, const char *command, int nParams,
         ERROR("PQsendQueryParams: %s", PQerrorMessage(conn->pg_conn));
     
     // handle it
-    if (_evpq_handle_query(con))
+    if (_evpq_handle_query(conn))
         goto error;
 
     // success
