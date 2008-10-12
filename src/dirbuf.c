@@ -5,11 +5,11 @@
 #include "lib/log.h"
 #include "lib/math.h"
 
-int dirbuf_init (struct dirbuf *buf, size_t req_size) {
+int dirbuf_init (struct dirbuf *buf, size_t req_size, off_t req_off) {
     buf->len = req_size;
-    buf->off = 0;
+    buf->req_off = req_off;
     
-    INFO("\tdirbuf.init: req_size=%zu", req_size);
+    DEBUG("\tdirbuf.init: req_size=%zu", req_size);
 
     // allocate the mem
     if ((buf->buf = malloc(buf->len)) == NULL)
@@ -22,7 +22,7 @@ error:
     return -1;
 }
 
-size_t difbuf_estimate (size_t req_size, size_t min_namelen) {
+size_t dirbuf_estimate (struct dirbuf *buf, size_t min_namelen) {
     char namebuf[DIRBUF_NAME_MAX];
     int i;
     
@@ -32,18 +32,18 @@ size_t difbuf_estimate (size_t req_size, size_t min_namelen) {
 
     namebuf[i] = '\0';
 
-    return req_size / (fuse_add_direntry(NULL, NULL, 0, namebuf, NULL, 0));
+    return buf->len / (fuse_add_direntry(NULL, NULL, 0, namebuf, NULL, 0));
 }
 
-int dirbuf_add (fuse_req_t req, off_t req_off, struct dirbuf *buf, off_t ent_off, off_t next_off, const char *ent_name, fuse_ino_t ent_ino, mode_t ent_mode) {
+int dirbuf_add (fuse_req_t req, struct dirbuf *buf, off_t ent_off, off_t next_off, const char *ent_name, fuse_ino_t ent_ino, mode_t ent_mode) {
     struct stat stbuf;
     size_t ent_size;
 
-    INFO("\tdirbuf.add: req_off=%zu, buf->len=%zu, buf->off=%zu, ent_off=%zu, next_off=%zu, ent_name=`%s`, ent_ino=%lu, ent_mode=%07o",
+    DEBUG("\tdirbuf.add: req_off=%zu, buf->len=%zu, buf->off=%zu, ent_off=%zu, next_off=%zu, ent_name=`%s`, ent_ino=%lu, ent_mode=%07o",
         req_off, buf->len, buf->off, ent_off, next_off, ent_name, ent_ino, ent_mode);
     
     // skip entries as needed
-    if (ent_off < req_off) 
+    if (ent_off < buf->req_off) 
         return 0;
 
     // set ino
@@ -70,12 +70,16 @@ int dirbuf_done (fuse_req_t req, struct dirbuf *buf) {
     // send the reply, return the error later
     err = fuse_reply_buf(req, buf->buf, buf->off);
 
-    INFO("\tdirbuf.done: size=%zu/%zu, err=%d", buf->off, buf->len, err);
+    DEBUG("\tdirbuf.done: size=%zu/%zu, err=%d", buf->off, buf->len, err);
 
     // free the dirbuf
-    free(buf->buf);
+    dirbuf_release(buf);
 
     // return the error code
     return err;
+}
+
+void dirbuf_release (struct dirbuf *buf) {
+    free(buf->buf); buf->buf = NULL;
 }
 

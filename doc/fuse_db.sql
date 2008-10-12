@@ -5,3 +5,7 @@ INSERT INTO inodes VALUES (1, 'DIR', 365, 0);
 INSERT INTO inodes VALUES (2, 'REG', 292, 0);
 INSERT INTO file_tree (name, parent, inode) VALUES ('foo', 1, 2);
 
+ALTER TABLE file_tree ALTER COLUMN name DROP NOT NULL;
+ALTER TABLE file_tree ALTER COLUMN parent DROP NOT NULL;
+INSERT INTO file_tree (name, parent, inode) VALUES (NULL, NULL, 1);
+

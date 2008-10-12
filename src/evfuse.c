@@ -26,6 +26,9 @@ struct evfuse {
     char *recv_buf;
 };
 
+// prototypes
+void evfuse_close (struct evfuse *ctx);
+
 static void _evfuse_ev_read (evutil_socket_t fd, short what, void *arg) {
     struct evfuse *ctx = arg;
     struct fuse_chan *ch = ctx->chan;
@@ -58,7 +61,7 @@ static void _evfuse_ev_read (evutil_socket_t fd, short what, void *arg) {
     return;
 
 error:
-    // fail
+    // close, but don't free
     evfuse_close(ctx);
 }
 
@@ -104,28 +107,47 @@ struct evfuse *evfuse_new (struct event_base *evbase, struct fuse_args *args, st
     return ctx;
 
 error:
-    free(ctx);
+    evfuse_free(ctx);
 
     return NULL;
 }
 
 void evfuse_close (struct evfuse *ctx) {
-    // remove our event
-    if (event_del(ctx->ev))
-        PWARNING("event_del");
+    if (ctx->ev) {
+        // remove our event
+        if (event_del(ctx->ev))
+            PWARNING("event_del");
 
-    // remove the chan
-    fuse_session_remove_chan(ctx->chan);
-    
-    // destroy the session
-    fuse_session_destroy(ctx->session);
+        ctx->ev = NULL;
+    }
 
-    // unmount
-    fuse_unmount(ctx->mountpoint, ctx->chan);
-    
+    if (ctx->session) {
+        // remove the chan
+        fuse_session_remove_chan(ctx->chan);
+
+        // destroy the session
+        fuse_session_destroy(ctx->session);
+
+        ctx->session = NULL;
+    }
+
+    if (ctx->chan) {
+        // unmount
+        fuse_unmount(ctx->mountpoint, ctx->chan);
+
+        ctx->chan = NULL;
+    }
+
     // free
-    free(ctx->recv_buf);
-    free(ctx->mountpoint);
-    free(ctx);
+    free(ctx->recv_buf); ctx->recv_buf = NULL;
+    free(ctx->mountpoint); ctx->mountpoint = NULL;
+}
+
+void evfuse_free (struct evfuse *ctx) {
+    if (ctx) {
+        evfuse_close(ctx);
+
+        free(ctx);
+    }
 }
 

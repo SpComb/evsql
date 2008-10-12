@@ -9,6 +9,9 @@
 static void _generic_err_vargs (int flags, const char *func, int err, const char *fmt, va_list va) {
     FILE *stream = flags & LOG_DISPLAY_STDERR ? stderr : stdout;
 
+    if (flags & LOG_DISPLAY_FATAL)
+        fprintf(stream, "FATAL: ");
+
     if (func)
         fprintf(stream, "%s: ", func);
     
@@ -33,7 +36,7 @@ void _generic_err_exit (int flags, const char *func, int err, const char *fmt, .
     va_list va;
 
     va_start(va, fmt);
-    _generic_err_vargs(flags, func, err, fmt, va);
+    _generic_err_vargs(flags | LOG_DISPLAY_FATAL, func, err, fmt, va);
     va_end(va);
       
     exit(EXIT_FAILURE);

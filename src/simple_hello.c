@@ -59,7 +59,7 @@ int main (int argc, char **argv) {
 error :
     // cleanup
     if (ctx.ev_fuse)
-        evfuse_close(ctx.ev_fuse);
+        evfuse_free(ctx.ev_fuse);
 
 /*
     if (ctx.fs)

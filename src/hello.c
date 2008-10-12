@@ -96,12 +96,12 @@ void hello_readdir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, stru
     }
 
     // fill in the dirbuf
-    if (dirbuf_init(&buf, size))
+    if (dirbuf_init(&buf, size, off))
         ERROR("failed to init dirbuf");
 
-    err =   dirbuf_add(req, off, &buf, 0, 1,  ".",        1,    S_IFDIR )
-        ||  dirbuf_add(req, off, &buf, 1, 2,  "..",       1,    S_IFDIR )
-        ||  dirbuf_add(req, off, &buf, 2, 3,  file_name,  2,    S_IFREG );
+    err =   dirbuf_add(req, &buf, 0, 1,  ".",        1,    S_IFDIR )
+        ||  dirbuf_add(req, &buf, 1, 2,  "..",       1,    S_IFDIR )
+        ||  dirbuf_add(req, &buf, 2, 3,  file_name,  2,    S_IFREG );
 
     if (err < 0)
         ERROR("failed to add dirents to buf");
@@ -234,7 +234,7 @@ int main (int argc, char **argv) {
 error :
     // cleanup
     if (ctx.ev_fuse)
-        evfuse_close(ctx.ev_fuse);
+        evfuse_free(ctx.ev_fuse);
     
     if (ctx.signals)
         signals_free(ctx.signals);

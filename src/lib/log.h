@@ -12,6 +12,8 @@ enum log_display_flags {
     LOG_DISPLAY_PERR =      0x02,
 
     LOG_DISPLAY_NONL =      0x04,
+
+    LOG_DISPLAY_FATAL =     0x08,
 };
 
 
@@ -53,6 +55,7 @@ extern enum _debug_level _cur_debug_level;
 #include "error.h"
 
 #define WARNING(...) err_func(__func__, __VA_ARGS__)
+#define NWARNING(...) err_func_nonl(__func__, __VA_ARGS__)
 #define PWARNING(...) perr_func(__func__, __VA_ARGS__)
 #define EWARNING(err, ...) eerr_func(__func__, (err), __VA_ARGS__)
 

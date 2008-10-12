@@ -157,13 +157,13 @@ static void simple_readdir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t o
         EERROR(err = ENOTDIR, "bad mode");
 
     // fill in the dirbuf
-    if (dirbuf_init(&buf, size))
+    if (dirbuf_init(&buf, size, off))
         ERROR("failed to init dirbuf");
     
     // add . and ..
     // we set the next offset to 2, because all dirent offsets will be larger than that
-    err =   dirbuf_add(req, off, &buf, 0, 1, ".",   dir_node->inode,    S_IFDIR )
-        ||  dirbuf_add(req, off, &buf, 1, 2, "..",  dir_node->inode,    S_IFDIR );
+    err =   dirbuf_add(req, &buf, 0, 1, ".",   dir_node->inode,    S_IFDIR )
+        ||  dirbuf_add(req, &buf, 1, 2, "..",  dir_node->inode,    S_IFDIR );
     
     if (err != 0)
         EERROR(err, "failed to add . and .. dirents");
@@ -175,7 +175,7 @@ static void simple_readdir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t o
             continue;
         
         // child node offsets are just inode + 2
-        if ((err = dirbuf_add(req, off, &buf, node->inode + 2, node->inode + 3, node->name, node->inode, node->mode_type)) < 0)
+        if ((err = dirbuf_add(req, &buf, node->inode + 2, node->inode + 3, node->name, node->inode, node->mode_type)) < 0)
             EERROR(err, "failed to add dirent for inode=%lu", node->inode);
         
         // stop if it's full

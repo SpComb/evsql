@@ -106,6 +106,9 @@ int evsql_result_uint16 (const struct evsql_result_info *res, size_t row, size_t
 
     if (evsql_result_binary(res, row, col, &data, sizeof(*uval), nullok))
         goto error;
+    
+    if (!data)
+        return 0;
 
     sval = ntohs(*((int16_t *) data));
 
@@ -126,6 +129,9 @@ int evsql_result_uint32 (const struct evsql_result_info *res, size_t row, size_t
 
     if (evsql_result_binary(res, row, col, &data, sizeof(*uval), nullok))
         goto error;
+    
+    if (!data)
+        return 0;
 
     sval = ntohl(*(int32_t *) data);
 
@@ -146,6 +152,9 @@ int evsql_result_uint64 (const struct evsql_result_info *res, size_t row, size_t
 
     if (evsql_result_binary(res, row, col, &data, sizeof(*uval), nullok))
         goto error;
+    
+    if (!data)
+        return 0;
 
     sval = ntohq(*(int64_t *) data);
 

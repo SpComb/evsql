@@ -69,6 +69,9 @@ static int _evsql_query_exec (struct evsql_conn *conn, struct evsql_query *query
  * The command should already be taken care of (NULL).
  */
 static void _evsql_query_free (struct evsql_query *query) {
+    if (!query)
+        return;
+        
     assert(query->command == NULL);
     
     // free params if present
@@ -83,12 +86,18 @@ static void _evsql_query_free (struct evsql_query *query) {
 
 /*
  * Execute the callback if res is given, and free the query.
+ *
+ * The query has been aborted, it will simply be freed
  */
 static void _evsql_query_done (struct evsql_query *query, const struct evsql_result_info *res) {
-    if (res) 
-        // call the callback
-        query->cb_fn(res, query->cb_arg);
-    
+    if (res) {
+        if (query->cb_fn)
+            // call the callback
+            query->cb_fn(res, query->cb_arg);
+        else
+            WARNING("supressing cb_fn because query was aborted");
+    }
+
     // free
     _evsql_query_free(query);
 }
@@ -171,12 +180,15 @@ static void _evsql_trans_release (struct evsql_trans *trans) {
 
 /*
  * Fail a single query, this will trigger the callback and free it.
+ *
+ * NOTE: Only for *TRANSACTIONLESS* queries.
  */
 static void _evsql_query_fail (struct evsql* evsql, struct evsql_query *query) {
     struct evsql_result_info res; ZINIT(res);
     
     // set up the result_info
     res.evsql = evsql;
+    res.trans = NULL;
     res.error = 1;
     
     // finish off the query
@@ -187,16 +199,21 @@ static void _evsql_query_fail (struct evsql* evsql, struct evsql_query *query) {
  * Fail a transaction, this will silently drop any query, trigger the error callback, two-way-deassociate/release the
  * conn, and then free the trans.
  */ 
-static void _evsql_trans_fail (struct evsql_trans *trans, int silent) {
+static void _evsql_trans_fail (struct evsql_trans *trans) {
     if (trans->query) {
         // free the query silently
         _evsql_query_free(trans->query); trans->query = NULL;
+
+        // also deassociate it from the conn!
+        trans->conn->query = NULL;
     }
 
     // tell the user
     // XXX: trans is in a bad state during this call
-    if (!silent)
+    if (trans->error_fn)
         trans->error_fn(trans, trans->cb_arg);
+    else
+        WARNING("supressing error because error_fn was NULL");
  
     // deassociate and release the conn
     trans->conn->trans = NULL; _evsql_conn_release(trans->conn); trans->conn = NULL;
@@ -215,7 +232,7 @@ static void _evsql_trans_fail (struct evsql_trans *trans, int silent) {
 static void _evsql_conn_fail (struct evsql_conn *conn) {
     if (conn->trans) {
         // let transactions handle their connection failures
-        _evsql_trans_fail(conn->trans, 0);
+        _evsql_trans_fail(conn->trans);
 
     } else {
         if (conn->query) {
@@ -302,13 +319,15 @@ static void _evsql_trans_ready (const struct evsql_result_info *res, void *arg) 
     return;
 
 error:
-    _evsql_trans_fail(res->trans, 0);
+    _evsql_trans_fail(res->trans);
 }
 
 /*
  * The transaction's connection is ready, send the 'BEGIN' query.
+ *
+ * If anything fails, calls _evsql_trans_fail and returns nonzero, zero on success
  */
-static void _evsql_trans_conn_ready (struct evsql *evsql, struct evsql_trans *trans) {
+static int _evsql_trans_conn_ready (struct evsql *evsql, struct evsql_trans *trans) {
     char trans_sql[EVSQL_QUERY_BEGIN_BUF];
     const char *isolation_level;
     int ret;
@@ -345,15 +364,17 @@ static void _evsql_trans_conn_ready (struct evsql *evsql, struct evsql_trans *tr
         ERROR("trans_sql overflow: %d >= %d", ret, EVSQL_QUERY_BEGIN_BUF);
     
     // execute the query
-    if (evsql_query(evsql, trans, trans_sql, _evsql_trans_ready, NULL))
+    if (evsql_query(evsql, trans, trans_sql, _evsql_trans_ready, NULL) == NULL)
         ERROR("evsql_query");
     
     // success
-    return;
+    return 0;
 
 error:
     // fail the transaction
-    _evsql_trans_fail(trans, 0);
+    _evsql_trans_fail(trans);
+
+    return -1;
 }
 
 /*
@@ -364,7 +385,8 @@ static void _evsql_evpq_connected (struct evpq_conn *_conn, void *arg) {
 
     if (conn->trans)
         // notify the transaction
-        _evsql_trans_conn_ready(conn->evsql, conn->trans);
+        // don't care about errors
+        (void) _evsql_trans_conn_ready(conn->evsql, conn->trans);
     
     else
         // pump any waiting transactionless queries
@@ -403,6 +425,7 @@ static void _evsql_evpq_done (struct evpq_conn *_conn, void *arg) {
     
     // set up the result_info
     res.evsql = conn->evsql;
+    res.trans = conn->trans;
     
     if (query->result.evpq == NULL) {
         // if a query didn't return any results (bug?), warn and fail the query
@@ -428,6 +451,11 @@ static void _evsql_evpq_done (struct evpq_conn *_conn, void *arg) {
     if (conn->trans) {
         // we can deassign the trans's query
         conn->trans->query = NULL;
+
+        // was an abort?
+        if (!query->cb_fn)
+            // notify the user that the transaction query has been aborted
+            conn->trans->ready_fn(conn->trans, conn->trans->cb_arg);
 
         // then hand the query to the user
         _evsql_query_done(query, &res);
@@ -616,10 +644,15 @@ static int _evsql_conn_ready (struct evsql_conn *conn) {
  * request should be dropped.
  */
 static int _evsql_conn_get (struct evsql *evsql, struct evsql_conn **conn_ptr, int may_queue) {
+    int have_nontrans = 0;
     *conn_ptr = NULL;
     
     // find a connection that isn't busy and is ready (unless the query queue is empty).
     LIST_FOREACH(*conn_ptr, &evsql->conn_list, entry) {
+        // we can only have a query enqueue itself if there is a non-trans conn it can later use
+        if (!(*conn_ptr)->trans)
+            have_nontrans = 1;
+
         // skip busy conns always
         if (_evsql_conn_busy(*conn_ptr))
             continue;
@@ -637,8 +670,8 @@ static int _evsql_conn_get (struct evsql *evsql, struct evsql_conn **conn_ptr, i
     if (*conn_ptr)
         return 0;
 
-    // return NULL if may_queue and the conn list is not empty
-    if (may_queue && !LIST_EMPTY(&evsql->conn_list))
+    // return NULL if may_queue and we have a non-trans conn that we can, at some point, use
+    if (may_queue && have_nontrans)
         return 0;
     
     // we need to open a new connection
@@ -660,7 +693,6 @@ struct evsql_trans *evsql_trans (struct evsql *evsql, enum evsql_trans_type type
 
     // store
     trans->evsql = evsql;
-    trans->error_fn = error_fn;
     trans->ready_fn = ready_fn;
     trans->done_fn = done_fn;
     trans->cb_arg = cb_arg;
@@ -675,13 +707,19 @@ struct evsql_trans *evsql_trans (struct evsql *evsql, enum evsql_trans_type type
 
     // is it already ready?
     if (_evsql_conn_ready(trans->conn) > 0) {
-        // call _evsql_trans_conn_ready directly
-        _evsql_trans_conn_ready(evsql, trans);
+        // call _evsql_trans_conn_ready directly, it will handle cleanup (silently, !error_fn)
+        if (_evsql_trans_conn_ready(evsql, trans)) {
+            // return NULL directly
+            return NULL;
+        }
 
     } else {
         // otherwise, wait for the conn to be ready
          
     }
+    
+    // and let it pass errors to the user
+    trans->error_fn = error_fn;
 
     // ok
     return trans;
@@ -734,8 +772,8 @@ static int _evsql_query_enqueue (struct evsql *evsql, struct evsql_trans *trans,
 
         // execute directly
         if (_evsql_query_exec(trans->conn, query, command)) {
-            // ack, fail the connection
-            _evsql_conn_fail(trans->conn);
+            // ack, fail the transaction
+            _evsql_trans_fail(trans);
             
             // caller frees query
             goto error;
@@ -863,6 +901,18 @@ error:
     return NULL;
 }
 
+void evsql_query_abort (struct evsql_trans *trans, struct evsql_query *query) {
+    assert(query);
+
+    if (trans) {
+        // must be the right query
+        assert(trans->query == query);
+    }
+
+    // just strip the callback and wait for it to complete as normal
+    query->cb_fn = NULL;
+}
+
 void _evsql_trans_commit_res (const struct evsql_result_info *res, void *arg) {
     (void) arg;
 
@@ -882,14 +932,27 @@ void _evsql_trans_commit_res (const struct evsql_result_info *res, void *arg) {
     return;
 
 error:
-    _evsql_trans_fail(res->trans, 0);
+    _evsql_trans_fail(res->trans);
 }
 
 int evsql_trans_commit (struct evsql_trans *trans) {
     static const char *sql = "COMMIT TRANSACTION";
+
+    if (trans->query)
+        ERROR("cannot COMMIT because transaction is still busy");
     
     // query
-    return (evsql_query(trans->evsql, trans, sql, _evsql_trans_commit_res, NULL) != NULL);
+    if (evsql_query(trans->evsql, trans, sql, _evsql_trans_commit_res, NULL) == NULL)
+        goto error;
+    
+    // mark it as commited in case someone wants to abort it
+    trans->has_commit = 1;
+
+    // success
+    return 0;
+
+error:
+    return -1;
 }
 
 void _evsql_trans_rollback_res (const struct evsql_result_info *res, void *arg) {
@@ -908,14 +971,49 @@ void _evsql_trans_rollback_res (const struct evsql_result_info *res, void *arg) 
     return;
 
 error:
-    // but do it silently
-    _evsql_trans_fail(res->trans, 1);
+    // fail the connection too, errors are supressed
+    _evsql_trans_fail(res->trans);
 }
 
-int evsql_trans_abort (struct evsql_trans *trans) {
+/*
+ * Used as the ready_fn callback in case of abort, otherwise directly
+ */
+void _evsql_trans_rollback (struct evsql_trans *trans, void *unused) {
     static const char *sql = "ROLLBACK TRANSACTION";
 
+    (void) unused;
+
     // query
-    return (evsql_query(trans->evsql, trans, sql, _evsql_trans_rollback_res, NULL) != NULL);
+    if (evsql_query(trans->evsql, trans, sql, _evsql_trans_rollback_res, NULL) == NULL) {
+        // fail the transaction/connection
+        _evsql_trans_fail(trans);
+    }
+
+}
+
+void evsql_trans_abort (struct evsql_trans *trans) {
+    // supress errors
+    trans->error_fn = NULL;
+    
+    if (trans->has_commit) {
+        // abort after commit doesn't make sense
+        FATAL("transaction was already commited");
+    }
+
+    if (trans->query) {
+        // gah, some query is running
+        WARNING("aborting pending query");
+        
+        // prepare to rollback once complete
+        trans->ready_fn = _evsql_trans_rollback;
+        
+        // abort
+        evsql_query_abort(trans, trans->query);
+
+    } else {
+        // just rollback directly
+        _evsql_trans_rollback(trans, NULL);
+
+    }
 }
 

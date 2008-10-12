@@ -17,9 +17,11 @@ struct evfuse;
 struct evfuse *evfuse_new (struct event_base *evbase, struct fuse_args *args, struct fuse_lowlevel_ops *llops, void *cb_data);
 
 /*
- * Close a evfuse context.
+ * Close and free evfuse context.
+ *
+ * Safe to call after errors/llops.destroy
  */
-void evfuse_close (struct evfuse *ctx);
+void evfuse_free (struct evfuse *ctx);
 
 #endif /* EVFUSE_H */
 

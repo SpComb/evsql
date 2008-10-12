@@ -175,15 +175,30 @@ struct evsql_query *evsql_query (struct evsql *evsql, struct evsql_trans *trans,
 struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans *trans, const char *command, const struct evsql_query_params *params, evsql_query_cb query_fn, void *cb_arg);
 
 /*
+ * Abort a query, the query callback will not be called, the query and any possible results will be discarded.
+ *
+ * This does not garuntee that the query will not execute, simply that you won't get the results.
+ *
+ * If the query is part of a transaction, then trans must be given, and the query must be the query that is currently
+ * executing on that trans. The transaction's ready_fn will be called once the query has been aborted.
+ */
+void evsql_query_abort (struct evsql_trans *trans, struct evsql_query *query);
+
+/*
  * Commit a transaction, calling done_fn if it was succesfull (error_fn otherwise).
+ *
+ * trans must be idle, just like for evsql_query.
+ *
+ * You cannot abort a COMMIT, calling trans_abort on trans after a succesful trans_commit is a FATAL error.
  */
 int evsql_trans_commit (struct evsql_trans *trans);
 
 /*
- * Abort a transaction, rolling it back. No callbacks will be called, unless this function returns nonzero, in which
- * case error_fn might be called.
+ * Abort a transaction, rolling it back. No callbacks will be called.
+ *
+ * You cannot abort a COMMIT, calling trans_abort on trans after a succesful trans_commit is a FATAL error.
  */
-int evsql_trans_abort (struct evsql_trans *trans);
+void evsql_trans_abort (struct evsql_trans *trans);
 
 /*
  * Transaction-handling functions

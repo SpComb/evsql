@@ -81,6 +81,9 @@ struct evsql_trans {
     // the transaction type
     enum evsql_trans_type type;
 
+    // has evsql_trans_commit be called?
+    int has_commit : 1;
+
     // our current query
     struct evsql_query *query;
 
