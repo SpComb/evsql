@@ -1,6 +1,7 @@
 #ifndef LIB_UTIL_H
 #define LIB_UTIL_H
 
+#include <string.h>
 #include <arpa/inet.h>
 
 /*

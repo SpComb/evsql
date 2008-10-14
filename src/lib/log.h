@@ -25,6 +25,8 @@ void _generic_err_exit (int flags, const char *func, int err, const char *fmt, .
         __attribute__ ((format (printf, 4, 5)))
         __attribute__ ((noreturn));
 
+static inline void debug_dummy (int dummy, ...) { /* no-op */ }
+
 enum _debug_level {
     DEBUG_FATAL,
     DEBUG_ERROR,
@@ -48,6 +50,7 @@ extern enum _debug_level _cur_debug_level;
 #define perr_func(func, ...)        _generic_err(       LOG_DISPLAY_STDERR | LOG_DISPLAY_PERR,  func, 0,    __VA_ARGS__ )
 #define perr_func_exit(func, ...)   _generic_err_exit(  LOG_DISPLAY_STDERR | LOG_DISPLAY_PERR,  func, 0,    __VA_ARGS__ )
 #define eerr_func(func, err, ...)   _generic_err(       LOG_DISPLAY_STDERR | LOG_DISPLAY_PERR,  func, err,  __VA_ARGS__ )
+#define eerr_func_exit(func,err,...) _generic_err_exit( LOG_DISPLAY_STDERR | LOG_DISPLAY_PERR,  func, err,  __VA_ARGS__ )
 #define debug(func, ...)            _generic_err(       LOG_DISPLAY_STDERR,                     func, 0,    __VA_ARGS__ )
 #define debug_nonl(func, ...)       _generic_err(       LOG_DISPLAY_STDERR | LOG_DISPLAY_NONL,  func, 0,    __VA_ARGS__ )
 
@@ -65,10 +68,10 @@ extern enum _debug_level _cur_debug_level;
 #define DEBUGN(...) debug_nonl(__func__, __VA_ARGS__)
 #define DEBUGNF(...) debug_nonl(NULL, __VA_ARGS__)
 #else
-#define DEBUG(...) (void) (0)
-#define DEBUGF(...) (void) (0)
-#define DEBUGN(...) (void) (0)
-#define DEBUGNF(...) (void) (0)
+#define DEBUG(...) debug_dummy(0, __VA_ARGS__)
+#define DEBUGF(...) debug_dummy(0, __VA_ARGS__)
+#define DEBUGN(...) debug_dummy(0, __VA_ARGS__)
+#define DEBUGNF(...) debug_dummy(0, __VA_ARGS__)
 #endif
 
 // default is to enable INFO

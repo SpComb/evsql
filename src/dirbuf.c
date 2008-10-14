@@ -6,7 +6,9 @@
 #include "lib/math.h"
 
 int dirbuf_init (struct dirbuf *buf, size_t req_size, off_t req_off) {
+    buf->buf = NULL;
     buf->len = req_size;
+    buf->off = 0;
     buf->req_off = req_off;
     
     DEBUG("\tdirbuf.init: req_size=%zu", req_size);
@@ -40,7 +42,7 @@ int dirbuf_add (fuse_req_t req, struct dirbuf *buf, off_t ent_off, off_t next_of
     size_t ent_size;
 
     DEBUG("\tdirbuf.add: req_off=%zu, buf->len=%zu, buf->off=%zu, ent_off=%zu, next_off=%zu, ent_name=`%s`, ent_ino=%lu, ent_mode=%07o",
-        req_off, buf->len, buf->off, ent_off, next_off, ent_name, ent_ino, ent_mode);
+        buf->req_off, buf->len, buf->off, ent_off, next_off, ent_name, ent_ino, ent_mode);
     
     // skip entries as needed
     if (ent_off < buf->req_off) 

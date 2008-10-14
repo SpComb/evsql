@@ -6,6 +6,7 @@
  */
 
 // XXX: libpq
+#include <stdint.h>
 #include <postgresql/libpq-fe.h>
 #include <event2/event.h>
 
@@ -189,6 +190,8 @@ void evsql_query_abort (struct evsql_trans *trans, struct evsql_query *query);
  *
  * trans must be idle, just like for evsql_query.
  *
+ * done_fn will never be called directly, always via the event loop.
+ *
  * You cannot abort a COMMIT, calling trans_abort on trans after a succesful trans_commit is a FATAL error.
  */
 int evsql_trans_commit (struct evsql_trans *trans);
@@ -206,8 +209,6 @@ void evsql_trans_abort (struct evsql_trans *trans);
 
 // error string, meant to be called from evsql_trans_error_cb
 const char *evsql_trans_error (struct evsql_trans *trans);
-
-// commit the transaction, calling 
 
 /*
  * Param-building functions
