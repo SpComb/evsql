@@ -2,100 +2,44 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include "common.h"
-#include "ops.h"
+#include "dbfs.h"
+#include "op_base.h"
 #include "../dirbuf.h"
+#include "../lib/log.h"
 
 /*
  * Directory related functionality like opendir, readdir, releasedir
  */
-
 struct dbfs_dirop {
-    struct fuse_file_info fi;
-    struct fuse_req *req;
+    struct dbfs_op base;
 
-    struct evsql_trans *trans;
+    // parent dir inodes
+    uint32_t parent;
     
-    // dir/parent dir inodes
-    uint32_t ino, parent;
-    
-    // opendir has returned and releasedir hasn't been called yet
-    int open;
-
     // for readdir
     struct dirbuf dirbuf;
 };
 
 /*
- * Free the dirop, aborting any in-progress transaction.
- *
- * The dirop must any oustanding request responded to first, must not be open, and must not have a transaction.
- *
- * The dirbuf will be released, and the dirop free'd.
+ * Release the dirbuf.
  */
-static void _dbfs_dirop_free (struct dbfs_dirop *dirop) {
-    assert(dirop);
-    assert(!dirop->open);
-    assert(!dirop->req);
-    assert(!dirop->trans);
-    
+static void _dbfs_dirop_free (struct dbfs_op *op_base) {
+    struct dbfs_dirop *dirop = (struct dbfs_dirop *) op_base;
+
     // just release the dirbuf
     dirbuf_release(&dirop->dirbuf);
-    
-    // and then free the dirop
-    free(dirop);
-}
-
-/*
- * This will handle backend failures during requests.
- *
- * 1) if we have a trans, abort it
- * 2) fail the req (mandatory)
- *
- * If the dirop is open, then we don't release it, but if it's not open, then the dirop will be free'd completely.
- *
- */
-static void _dbfs_dirop_fail (struct dbfs_dirop *dirop) {
-    int err;
-
-    assert(dirop->req);
-    
-    if (dirop->trans) {
-        // abort the trans
-        evsql_trans_abort(dirop->trans);
-        
-        dirop->trans = NULL;
-    }
-
-    // send an error reply
-    if ((err = fuse_reply_err(dirop->req, err)))
-        // XXX: handle these failures /somehow/, or requests will hang and interrupts might handle invalid dirops
-        EFATAL(err, "dbfs.fail %p:%p dirop_fail: reply with fuse_reply_err", dirop, dirop->req);
-   
-    // drop the req
-    dirop->req = NULL;
-
-    // is it open?
-    if (!dirop->open) {
-        // no, we can free it now and then forget about the whole thing
-        _dbfs_dirop_free(dirop);
-
-    } else {
-        // we need to wait for releasedir
-
-    }
 }
 
 /*
  * Handle the results for the initial attribute lookup for the dir itself during opendir ops.
  */
-static void dbfs_opendir_info_res (const struct evsql_result_info *res, void *arg) {
+static void dbfs_opendir_res (const struct evsql_result_info *res, void *arg) {
     struct dbfs_dirop *dirop = arg;
     int err;
     
-    assert(dirop->trans);
-    assert(dirop->req);
-    assert(!dirop->open);
+    assert(dirop->base.req);
+    assert(dirop->base.trans); // query callbacks don't get called if the trans fails
+    assert(!dirop->base.open);
    
     // check the results
     if ((err = _dbfs_check_res(res, 1, 2)))
@@ -114,17 +58,11 @@ static void dbfs_opendir_info_res (const struct evsql_result_info *res, void *ar
     if (_dbfs_mode(type) != S_IFDIR)
         EERROR(err = ENOTDIR, "wrong type: %s", type);
     
-    INFO("[dbfs.opendir %p:%p] -> ino=%lu, parent=%lu, type=%s", dirop, dirop->req, (unsigned long int) dirop->ino, (unsigned long int) dirop->parent, type);
+    INFO("[dbfs.opendir %p:%p] -> ino=%lu, parent=%lu, type=%s", dirop, dirop->base.req, (unsigned long int) dirop->base.ino, (unsigned long int) dirop->parent, type);
     
-    // send the openddir reply
-    if ((err = fuse_reply_open(dirop->req, &dirop->fi)))
-        EERROR(err, "fuse_reply_open");
-    
-    // req is done
-    dirop->req = NULL;
-
-    // dirop is now open
-    dirop->open = 1;
+    // open_fn done, do the open_reply
+    if ((err = dbfs_op_open_reply(&dirop->base)))
+        goto error;
 
     // success, fallthrough for evsql_result_free
     err = 0;
@@ -132,7 +70,7 @@ static void dbfs_opendir_info_res (const struct evsql_result_info *res, void *ar
 error:
     if (err)
         // fail it
-        _dbfs_dirop_fail(dirop);
+        dbfs_op_fail(&dirop->base, err);
     
     // free
     evsql_result_free(res);
@@ -141,20 +79,16 @@ error:
 /*
  * The opendir transaction is ready for use. Query for the given dir's info
  */
-static void dbfs_dirop_ready (struct evsql_trans *trans, void *arg) {
-    struct dbfs_dirop *dirop = arg;
-    struct dbfs *ctx = fuse_req_userdata(dirop->req);
+static void dbfs_dirop_open (struct dbfs_op *op_base) {
+    struct dbfs_dirop *dirop = (struct dbfs_dirop *) op_base;
+    struct dbfs *ctx = fuse_req_userdata(dirop->base.req);
     int err;
     
-    // XXX: unless we abort queries
-    assert(trans == dirop->trans);
-    assert(dirop->req);
-    assert(!dirop->open);
+    assert(dirop->base.trans); 
+    assert(dirop->base.req);
+    assert(!dirop->base.open);
 
-    INFO("[dbfs.opendir %p:%p] -> trans=%p", dirop, dirop->req, trans);
-
-    // remember the transaction
-    dirop->trans = trans;
+    INFO("[dbfs.opendir %p:%p] -> trans=%p", dirop, dirop->base.req, dirop->base.trans);
     
     // first fetch info about the dir itself
     const char *sql =
@@ -171,12 +105,12 @@ static void dbfs_dirop_ready (struct evsql_trans *trans, void *arg) {
 
     // build params
     if (0
-        ||  evsql_param_uint32(&params, 0, dirop->ino)
+        ||  evsql_param_uint32(&params, 0, dirop->base.ino)
     )
         SERROR(err = EIO);
         
     // query
-    if (evsql_query_params(ctx->db, dirop->trans, sql, &params, dbfs_opendir_info_res, dirop) == NULL)
+    if (evsql_query_params(ctx->db, dirop->base.trans, sql, &params, dbfs_opendir_res, dirop) == NULL)
         SERROR(err = EIO);
 
     // ok, wait for the info results
@@ -184,67 +118,11 @@ static void dbfs_dirop_ready (struct evsql_trans *trans, void *arg) {
 
 error:
     // fail it
-    _dbfs_dirop_fail(dirop);
+    dbfs_op_fail(&dirop->base, err);
 }
 
 /*
- * The dirop trans was committed, i.e. releasedir has completed
- */
-static void dbfs_dirop_done (struct evsql_trans *trans, void *arg) {
-    struct dbfs_dirop *dirop = arg;
-    int err;
-    
-    assert(dirop->trans);
-    assert(dirop->req);
-    assert(!dirop->open);   // should not be considered as open anymore at this point, as errors should release
-
-    INFO("[dbfs.releasedir %p:%p] -> OK", dirop, dirop->req);
-
-    // forget trans
-    dirop->trans = NULL;
-    
-    // just reply
-    if ((err = fuse_reply_err(dirop->req, 0)))
-        // XXX: handle these failures /somehow/, or requests will hang and interrupts might handle invalid dirops
-        EFATAL(err, "[dbfs.releasedir %p:%p] dirop_done: reply with fuse_reply_err", dirop, dirop->req);
-    
-    // req is done
-    dirop->req = NULL;
-
-    // then we can just free dirop
-    _dbfs_dirop_free(dirop);
-}
-
-/*
- * The dirop trans has failed, somehow, at some point, some where.
- *
- * This might happend during the opendir evsql_trans, during a readdir evsql_query, during the releasedir
- * evsql_trans_commit, or at any point in between.
- *
- * 1) loose the transaction
- * 2) if dirop has a req, we handle failing it
- */
-static void dbfs_dirop_error (struct evsql_trans *trans, void *arg) {
-    struct dbfs_dirop *dirop = arg;
-
-    INFO("[dbfs:dirop %p:%p] evsql transaction error: %s", dirop, dirop->req, evsql_trans_error(trans));
-    
-    // deassociate the trans
-    dirop->trans = NULL;
-    
-    // if we were answering a req, error it out, and if the dirop isn't open, release it
-    // if we didn't have a req outstanding, the dirop must be open, so we wouldn't free it in any case, and must wait
-    // for the next readdir/releasedir to detect this and return an error reply
-    if (dirop->req)
-        _dbfs_dirop_fail(dirop);
-    else
-        assert(dirop->open);
-}
-
-/*
- * Handle opendir(), this means starting a new transaction, dbfs_dirop_ready/error will continue on from there.
- *
- * The contents of fi will be copied into the dirop, and will be used as the basis for the fuse_reply_open reply.
+ * Handle opendir(), this means starting a new op.
  */
 void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi) {
     struct dbfs *ctx = fuse_req_userdata(req);
@@ -255,20 +133,11 @@ void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *
     if ((dirop = calloc(1, sizeof(*dirop))) == NULL && (err = EIO))
         ERROR("calloc");
 
-    INFO("[dbfs.opendir %p:%p] ino=%lu, fi=%p", dirop, req, ino, fi);
-    
-    // store the dirop
-    // copy *fi since it's on the stack
-    dirop->fi = *fi;
-    dirop->fi.fh = (uint64_t) dirop;
-    dirop->req = req;
-    dirop->ino = ino;
+    // do the op_open
+    if ((err = dbfs_op_open(ctx, &dirop->base, req, ino, fi, _dbfs_dirop_free, dbfs_dirop_open)))
+        ERROR("dbfs_op_open");
 
-    // start a new transaction
-    if ((dirop->trans = evsql_trans(ctx->db, EVSQL_TRANS_SERIALIZABLE, dbfs_dirop_error, dbfs_dirop_ready, dbfs_dirop_done, dirop)) == NULL)
-        SERROR(err = EIO);
-    
-    // XXX: handle interrupts
+    INFO("[dbfs.opendir %p:%p] ino=%lu, fi=%p", dirop, req, ino, fi);
     
     // wait
     return;
@@ -276,7 +145,7 @@ void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *
 error:
     if (dirop) {
         // we can fail normally
-        _dbfs_dirop_fail(dirop);
+        dbfs_op_fail(&dirop->base, err);
 
     } else {
         // must error out manually as we couldn't alloc the context
@@ -291,20 +160,20 @@ error:
  * Fill up the dirbuf, and then send the reply.
  *
  */
-static void dbfs_readdir_files_res (const struct evsql_result_info *res, void *arg) {
+static void dbfs_readdir_res (const struct evsql_result_info *res, void *arg) {
     struct dbfs_dirop *dirop = arg;
     int err;
     size_t row;
     
-    assert(dirop->req);
-    assert(dirop->trans);
-    assert(dirop->open);
+    assert(dirop->base.req);
+    assert(dirop->base.trans); // query callbacks don't get called if the trans fails
+    assert(dirop->base.open);
     
     // check the results
     if ((err = _dbfs_check_res(res, 0, 4)) < 0)
         SERROR(err = EIO);
         
-    INFO("[dbfs.readdir %p:%p] -> files: res_rows=%zu", dirop, dirop->req, evsql_result_rows(res));
+    INFO("[dbfs.readdir %p:%p] -> files: res_rows=%zu", dirop, dirop->base.req, evsql_result_rows(res));
         
     // iterate over the rows
     for (row = 0; row < evsql_result_rows(res); row++) {
@@ -324,7 +193,7 @@ static void dbfs_readdir_files_res (const struct evsql_result_info *res, void *a
 
         // add to the dirbuf
         // offsets are just offset + 2
-        if ((err = dirbuf_add(dirop->req, &dirop->dirbuf, off + 2, off + 3, name, ino, _dbfs_mode(type))) < 0 && (err = EIO))
+        if ((err = dirbuf_add(dirop->base.req, &dirop->dirbuf, off + 2, off + 3, name, ino, _dbfs_mode(type))) < 0 && (err = EIO))
             ERROR("failed to add dirent for inode=%lu", (long unsigned int) ino);
         
         // stop if it's full
@@ -333,18 +202,19 @@ static void dbfs_readdir_files_res (const struct evsql_result_info *res, void *a
     }
 
     // send it
-    if ((err = dirbuf_done(dirop->req, &dirop->dirbuf)))
+    if ((err = dirbuf_done(dirop->base.req, &dirop->dirbuf)))
         EERROR(err, "failed to send buf");
-
-    // req is done
-    dirop->req = NULL;
     
+    // handled the req
+    if ((err = dbfs_op_req_done(&dirop->base)))
+        goto error;
+
     // good, fallthrough
     err = 0;
 
 error:
     if (err)
-        _dbfs_dirop_fail(dirop);
+        dbfs_op_fail(&dirop->base, err);
 
     // free
     evsql_result_free(res);
@@ -352,7 +222,7 @@ error:
 
 /*
  * Handle a readdir request. This will execute a SQL query inside the transaction to get the files at the given offset,
- * and _dbfs_readdir_res will handle the results.
+ * and dbfs_readdir_res will handle the results.
  *
  * If trans failed earlier, detect that and return an error.
  */
@@ -360,20 +230,12 @@ void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off,
     struct dbfs *ctx = fuse_req_userdata(req);
     struct dbfs_dirop *dirop = (struct dbfs_dirop *) fi->fh;
     int err;
-    
-    assert(dirop);
-    assert(!dirop->req);
-    assert(dirop->open);
-    assert(dirop->ino == ino);
-    
-    // store the new req
-    dirop->req = req;
 
-    // detect earlier failures
-    if (!dirop->trans && (err = EIO))
-        ERROR("dirop trans has failed");
+    // get the op
+    if ((dirop = (struct dbfs_dirop *) dbfs_op_req(req, ino, fi)) == NULL)
+        SERROR(err = EIO);
     
-    INFO("[dbfs.readdir %p:%p] ino=%lu, size=%zu, off=%zu, fi=%p : trans=%p", dirop, req, ino, size, off, fi, dirop->trans);
+    INFO("[dbfs.readdir %p:%p] ino=%lu, size=%zu, off=%zu, fi=%p : trans=%p", dirop, req, ino, size, off, fi, dirop->base.trans);
 
     // create the dirbuf
     if (dirbuf_init(&dirop->dirbuf, size, off))
@@ -383,9 +245,9 @@ void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off,
     // we set the next offset to 2, because all dirent offsets will be larger than that
     // assume that these two should *always* fit
     if ((err = (0
-        ||  dirbuf_add(req, &dirop->dirbuf, 0, 1, ".",   dirop->ino,    S_IFDIR )
+        ||  dirbuf_add(req, &dirop->dirbuf, 0, 1, ".",   dirop->base.ino,    S_IFDIR )
         ||  dirbuf_add(req, &dirop->dirbuf, 1, 2, "..",  
-                        dirop->parent ? dirop->parent : dirop->ino,     S_IFDIR )
+                        dirop->parent ? dirop->parent : dirop->base.ino,     S_IFDIR )
     )) && (err = EIO))
         ERROR("failed to add . and .. dirents");
 
@@ -411,21 +273,21 @@ void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off,
     
     // build params
     if (0
-        ||  evsql_param_uint32(&params, 0, dirop->ino)
+        ||  evsql_param_uint32(&params, 0, ino)
         ||  evsql_param_uint32(&params, 1, off)
         ||  evsql_param_uint32(&params, 2, dirbuf_estimate(&dirop->dirbuf, 0))
     )
         SERROR(err = EIO);
 
     // query
-    if (evsql_query_params(ctx->db, dirop->trans, sql, &params, dbfs_readdir_files_res, dirop) == NULL)
+    if (evsql_query_params(ctx->db, dirop->base.trans, sql, &params, dbfs_readdir_res, dirop) == NULL)
         SERROR(err = EIO);
 
     // good, wait
     return;
 
 error:
-    _dbfs_dirop_fail(dirop);
+    dbfs_op_fail(&dirop->base, err);
 }
 
 /*
@@ -434,63 +296,7 @@ error:
  * The dirop may be in a failed state.
  */
 void dbfs_releasedir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi) {
-    struct dbfs *ctx = fuse_req_userdata(req);
-    struct dbfs_dirop *dirop = (struct dbfs_dirop *) fi->fh;
-    int err;
-
-    (void) ctx;
-    
-    assert(dirop);
-    assert(!dirop->req);
-    assert(dirop->ino == ino);
-    
-    // update to this req
-    dirop->req = req;
-
-    // fi is irrelevant, we don't touch the flags anyways
-    (void) fi;
-
-    // handle failed trans
-    if (!dirop->trans)
-        ERROR("trans has failed");
-    
-    // log
-    INFO("[dbfs.releasedir %p:%p] ino=%lu, fi=%p : trans=%p", dirop, req, ino, fi, dirop->trans);
-    
-    // we must commit the transaction (although it was jut SELECTs, no changes).
-    // Note that this might cause dbfs_dirop_error to be called, we can tell if that happaned by looking at dirop->req
-    // or dirop->trans this means that we need to keep the dirop open when calling trans_commit, so that dirop_error
-    // doesn't free it out from underneath us.
-    if (evsql_trans_commit(dirop->trans))
-        SERROR(err = EIO);
-
-    // fall-through to cleanup
-    err = 0;
-
-error:
-    // the dirop is not open anymore and can be free'd:
-    // a) if we already caught an error
-    // b) if we get+send an error later on
-    // c) if we get+send the done/no-error later on
-    dirop->open = 0;
-
-    // did the commit/pre-commit-checks fail?
-    if (err) {
-        // a) the trans failed earlier (readdir), so we have a req but no trans
-        // b) the trans commit failed, dirop_error got called -> no req and no trans
-        // c) the trans commit failed, dirop_error did not get called -> have req and trans
-        // we either have a req (may or may not have trans), or we don't have a trans either
-        // i.e. there is no situation where we don't have a req but do have a trans
-
-        if (dirop->req)
-            _dbfs_dirop_fail(dirop);
-        else
-            assert(!dirop->trans);
-
-    } else {
-        // shouldn't slip by, dirop_done should not get called directly. Once it does, it will handle both.
-        assert(dirop->req);
-        assert(dirop->trans);
-    }
+    // just passthrough to dbfs_op
+    dbfs_op_release(req, ino, fi);
 }
 

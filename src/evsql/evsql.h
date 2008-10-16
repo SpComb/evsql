@@ -1,9 +1,16 @@
 #ifndef EVSQL_INTERNAL_H
 #define EVSQL_INTERNAL_H
 
+/*
+ * Internal interfaces
+ */
+
 #include <sys/queue.h>
 
-#include "evsql.h"
+#include <event2/event.h>
+
+#include "../evsql.h"
+#include "../evpq.h"
 
 /*
  * The engine type

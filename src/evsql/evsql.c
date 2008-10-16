@@ -4,11 +4,9 @@
 #include <string.h>
 
 #include "evsql.h"
-#include "evsql_internal.h"
-#include "evpq.h"
-#include "lib/log.h"
-#include "lib/error.h"
-#include "lib/misc.h"
+#include "../lib/log.h"
+#include "../lib/error.h"
+#include "../lib/misc.h"
 
 /*
  * A couple function prototypes

@@ -47,7 +47,7 @@ static void _evfuse_ev_read (evutil_socket_t fd, short what, void *arg) {
         ERROR("fuse_chan_recv failed: %s", strerror(-res));
     
     if (res > 0) {
-        INFO("[evfuse] got %d bytes from /dev/fuse", res);
+        DEBUG("got %d bytes from /dev/fuse", res);
 
         // received a fuse_req, so process it
         fuse_session_process(ctx->session, ctx->recv_buf, res, ch);

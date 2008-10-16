@@ -1,7 +1,8 @@
 
 #include <string.h>
 
-#include "common.h"
+#include "dbfs.h"
+#include "../lib/log.h"
 
 mode_t _dbfs_mode (const char *type) {
     if (!strcmp(type, "DIR"))

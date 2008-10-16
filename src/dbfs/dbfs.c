@@ -1,9 +1,10 @@
 
 #include <stdlib.h>
 
+#include "dbfs.h"
 #include "../dbfs.h"
-#include "common.h"
-#include "ops.h"
+#include "../lib/log.h"
+#include "../lib/misc.h"
 
 static struct fuse_lowlevel_ops dbfs_llops = {
 

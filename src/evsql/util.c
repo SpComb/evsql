@@ -1,10 +1,8 @@
 #include <assert.h>
 
 #include "evsql.h"
-#include "evsql_internal.h"
-#include "evpq.h"
-#include "lib/error.h"
-#include "lib/misc.h"
+#include "../lib/error.h"
+#include "../lib/misc.h"
 
 int evsql_param_string (struct evsql_query_params *params, size_t param, const char *ptr) {
     struct evsql_query_param *p = &params->list[param];

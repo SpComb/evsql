@@ -1,15 +1,14 @@
-#ifndef DBFS_COMMON_H
-#define DBFS_COMMON_H
+#ifndef DBFS_DBFS_H
+#define DBFS_DBFS_H
 
 #include <sys/stat.h>
 #include <errno.h>
 
 #include <event2/event.h>
 
+#include "ops.h"
 #include "../evfuse.h"
 #include "../evsql.h"
-#include "../lib/log.h"
-#include "../lib/misc.h"
 
 /*
  * Structs and functions shared between all dbfs components
@@ -59,4 +58,4 @@ int _dbfs_check_res (const struct evsql_result_info *res, size_t rows, size_t co
  */
 int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_t row, size_t col_offset);
 
-#endif /* DBFS_COMMON_H */
+#endif /* DBFS_DBFS_H */
