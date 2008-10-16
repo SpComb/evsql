@@ -47,8 +47,9 @@ enum evsql_param_format {
 enum evsql_param_type {
     EVSQL_PARAM_INVALID,
 
-    EVSQL_PARAM_NULL,
-
+    EVSQL_PARAM_NULL_,
+    
+    EVSQL_PARAM_BINARY,
     EVSQL_PARAM_STRING,
     EVSQL_PARAM_UINT16,
     EVSQL_PARAM_UINT32,
@@ -213,8 +214,18 @@ const char *evsql_trans_error (struct evsql_trans *trans);
 /*
  * Param-building functions
  */
+int evsql_param_binary (struct evsql_query_params *params, size_t param, const char *ptr, size_t len);
 int evsql_param_string (struct evsql_query_params *params, size_t param, const char *ptr);
+int evsql_param_uint16 (struct evsql_query_params *params, size_t param, uint16_t uval);
 int evsql_param_uint32 (struct evsql_query_params *params, size_t param, uint32_t uval);
+int evsql_params_clear (struct evsql_query_params *params);
+
+/*
+ * Query-handling functions
+ */
+
+// print out a textual repr of the given query/params via DEBUG
+void evsql_query_debug (const char *sql, const struct evsql_query_params *params);
 
 /*
  * Result-handling functions
@@ -231,8 +242,7 @@ size_t evsql_result_cols (const struct evsql_result_info *res);
 
 // fetch the raw binary value from a result set, and return it via ptr
 // if size is nonzero, check that the size of the field data matches
-int evsql_result_buf    (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok);
-int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t size, int nullok);
+int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok);
 int evsql_result_string (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, int nullok);
 
 // fetch certain kinds of values from a binary result set

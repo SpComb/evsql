@@ -20,7 +20,7 @@ BIN_PATHS = $(addprefix bin/,$(BIN_NAMES))
 
 # complex modules
 EVSQL_OBJS = obj/evsql/evsql.o obj/evsql/util.o obj/evpq.o
-DBFS_OBJS = obj/dbfs/dbfs.o obj/dbfs/common.o obj/dbfs/core.o obj/dbfs/op_base.o obj/dbfs/dirop.o obj/dirbuf.o obj/dbfs/fileop.o
+DBFS_OBJS = obj/dbfs/dbfs.o obj/dbfs/common.o obj/dbfs/core.o obj/dbfs/op_base.o obj/dbfs/dirop.o obj/dirbuf.o obj/dbfs/fileop.o obj/dbfs/attr.o
 
 # first target
 all: ${BIN_PATHS}
@@ -44,7 +44,9 @@ SRC_DIRS = $(dir $(SRC_NAMES))
 
 # other targets
 clean :
-	-rm obj/* bin/* build/deps/*
+	-rm obj/*.o obj/*/*.o
+	-rm bin/* 
+	-rm build/deps/*.d build/deps/*/*.d
 
 clean-deps:
 	-rm build/deps/*/*.d 

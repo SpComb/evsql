@@ -852,7 +852,7 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
     // allocate the vertical storage for the parameters
     if (0
         
-//            !(query->params.types    = calloc(query->params.count, sizeof(Oid)))
+        ||  !(query->params.types    = calloc(query->params.count, sizeof(Oid)))
         ||  !(query->params.values   = calloc(query->params.count, sizeof(char *)))
         ||  !(query->params.lengths  = calloc(query->params.count, sizeof(int)))
         ||  !(query->params.formats  = calloc(query->params.count, sizeof(int)))
@@ -861,8 +861,8 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
 
     // transform
     for (param = params->list, idx = 0; param->type; param++, idx++) {
-        // `types` stays NULL
-        // query->params.types[idx] = 0;
+        // `set for NULLs, otherwise not
+        query->params.types[idx] = param->data_raw ? 0 : 16;
         
         // values
         query->params.values[idx] = param->data_raw;
@@ -870,8 +870,8 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
         // lengths
         query->params.lengths[idx] = param->length;
 
-        // formats, binary if length is nonzero
-        query->params.formats[idx] = param->length ? 1 : 0;
+        // formats, binary if length is nonzero, but text for NULLs
+        query->params.formats[idx] = param->length && param->data_raw ? 1 : 0;
     }
 
     // result format

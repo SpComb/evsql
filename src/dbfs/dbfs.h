@@ -28,6 +28,10 @@ struct dbfs {
 // XXX: not sure how this should work
 #define CACHE_TIMEOUT 1.0
 
+// columns used for stat_info
+#define DBFS_STAT_COLS " inodes.type, inodes.mode, lo_size(data), count(*) "
+#define DBFS_STAT_COLS_NOAGGREGATE " inodes.type, inodes.mode, lo_size(data), NULL "
+
 /*
  * Convert the CHAR(4) inodes.type from SQL into a mode_t.
  *

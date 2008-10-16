@@ -40,6 +40,7 @@ extern enum _debug_level _cur_debug_level;
 
 // various kinds of ways to handle an error, 2**3 of them, *g*
 #define info(...)                   _generic_err(       LOG_DISPLAY_STDOUT,                     NULL, 0,    __VA_ARGS__ )
+#define info_nonl(...)              _generic_err(       LOG_DISPLAY_STDOUT | LOG_DISPLAY_NONL,  NULL, 0,    __VA_ARGS__ )
 #define error(...)                  _generic_err(       LOG_DISPLAY_STDERR,                     NULL, 0,    __VA_ARGS__ )
 #define err_exit(...)               _generic_err_exit(  LOG_DISPLAY_STDERR,                     NULL, 0,    __VA_ARGS__ )
 #define perr(...)                   _generic_err(       LOG_DISPLAY_STDERR | LOG_DISPLAY_PERR,  NULL, 0,    __VA_ARGS__ )
@@ -85,6 +86,7 @@ extern enum _debug_level _cur_debug_level;
 
 #if INFO_ENABLED
 #define INFO(...) info(__VA_ARGS__)
+#define INFON(...) info_nonl(__VA_ARGS__)
 #else
 #define INFO(...) (void) (__VA_ARGS__)
 #endif

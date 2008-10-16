@@ -139,7 +139,7 @@ void dbfs_read_res (const struct evsql_result_info *res, void *arg) {
         SERROR(err = EIO);
         
     // get the data
-    if (evsql_result_buf(res, 0, 0, &buf, &size, 0))
+    if (evsql_result_binary(res, 0, 0, &buf, &size, 0))
         SERROR(err = EIO);
 
     INFO("[dbfs.read %p:%p] -> size=%zu", fop, fop->base.req, size);
@@ -208,8 +208,83 @@ error:
     dbfs_op_fail(&fop->base, err);
 }
 
-void dbfs_write (struct fuse_req *req, fuse_ino_t ino, const char *buf, size_t size, off_t off, struct fuse_file_info *fi) {
+void dbfs_write_res (const struct evsql_result_info *res, void *arg) {
+    struct dbfs_fileop *fop = arg;
+    int err;
+    uint32_t size;
+ 
+    // check the results
+    if ((err = _dbfs_check_res(res, 1, 1)) < 0)
+        SERROR(err = EIO);
+        
+    // get the size
+    if (evsql_result_uint32(res, 0, 0, &size, 0))
+        SERROR(err = EIO);
 
+    INFO("[dbfs.write %p:%p] -> size=%lu", fop, fop->base.req, (long unsigned int) size);
+        
+    // send it
+    if ((err = fuse_reply_write(fop->base.req, size)))
+        EERROR(err, "fuse_reply_write");
+    
+    // ok, req handled
+    if ((err = dbfs_op_req_done(&fop->base)))
+        goto error;
+
+    // good, fallthrough
+    err = 0;
+
+error:
+    if (err)
+        dbfs_op_fail(&fop->base, err);
+
+    // free
+    evsql_result_free(res);
+}
+
+void dbfs_write (struct fuse_req *req, fuse_ino_t ino, const char *buf, size_t size, off_t off, struct fuse_file_info *fi) {
+    struct dbfs *ctx = fuse_req_userdata(req);
+    struct dbfs_fileop *fop;
+    int err;
+    
+    // get the op
+    if ((fop = (struct dbfs_fileop *) dbfs_op_req(req, ino, fi)) == NULL)
+        return;
+
+    // log
+    INFO("[dbfs.write %p:%p] ino=%lu, size=%zu, off=%lu, fi->flags=%04X", fop, req, ino, size, off, fi->flags);
+
+    // query
+    const char *sql = 
+        "SELECT"
+        " lo_pwrite($1::int4, $2::bytea, $3::int4)";
+    
+    static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
+        EVSQL_PARAM ( UINT32 ), // fd
+        EVSQL_PARAM ( BINARY ), // buf
+        EVSQL_PARAM ( UINT32 ), // off
+
+        EVSQL_PARAMS_END
+    };
+
+    // build params
+    if (0
+        ||  evsql_param_uint32(&params, 0, fop->lo_fd)
+        ||  evsql_param_binary(&params, 1, buf, size)
+        ||  evsql_param_uint32(&params, 2, off)
+    )
+        SERROR(err = EIO);
+        
+    // query
+    if (evsql_query_params(ctx->db, fop->base.trans, sql, &params, dbfs_write_res, fop) == NULL)
+        SERROR(err = EIO);
+
+    // ok, wait for the info results
+    return;
+
+error:
+    // fail it
+    dbfs_op_fail(&fop->base, err);
 }
 
 void dbfs_flush (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi) {

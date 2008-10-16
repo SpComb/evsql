@@ -17,7 +17,7 @@
 #include "lib/signals.h"
 #include "lib/misc.h"
 
-#define CONNINFO_DEFAULT "dbname=test"
+#define CONNINFO_DEFAULT "dbname=dbfs port=5433"
 
 int main (int argc, char **argv) {
     struct event_base *ev_base = NULL;

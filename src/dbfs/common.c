@@ -51,17 +51,17 @@ int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_
     
     uint16_t mode;
     uint32_t size = 0;  // NULL for non-REG inodes
-    uint64_t nlink;
+    uint64_t nlink = 0; // will be NULL for non-GROUP BY queries
     const char *type;
     
     // extract the data
-    if (0
+    if ((0
         ||  evsql_result_string(res, row, col_offset + 0, &type,       0 ) // inodes.type
         ||  evsql_result_uint16(res, row, col_offset + 1, &mode,       0 ) // inodes.mode
         ||  evsql_result_uint32(res, row, col_offset + 2, &size,       1 ) // size
-        ||  evsql_result_uint64(res, row, col_offset + 3, &nlink,      0 ) // count(*)
-    )
-        EERROR(err = EIO, "invalid db data");
+        ||  evsql_result_uint64(res, row, col_offset + 3, &nlink,      1 ) // count(*)
+    ) && (err = EIO))
+        ERROR("invalid db data");
 
     INFO("\tst_mode=S_IF%s | %ho, st_nlink=%llu, st_size=%llu", type, mode, (long long unsigned int) nlink, (long long unsigned int) size);
 
@@ -74,7 +74,7 @@ int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_
     return 0;
 
 error:
-    return -1;
+    return err;
 }
 
 
