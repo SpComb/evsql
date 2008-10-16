@@ -73,6 +73,8 @@ int dbfs_op_open_reply (struct dbfs_op *op);
  * Lookup the op for the given fi, validate params, and assign the new req.
  *
  * In case the op failed previously, this will error the req and return NULL, indicating that the req has been handled.
+ *
+ * Repeat, if this returns NULL, consider req invalid.
  */
 struct dbfs_op *dbfs_op_req (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
 

@@ -64,7 +64,7 @@ size_t evsql_result_cols (const struct evsql_result_info *res) {
     }
 }
 
-int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t size, int nullok) {
+int evsql_result_buf (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok) {
     *ptr = NULL;
 
     switch (res->evsql->type) {
@@ -79,16 +79,29 @@ int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t
             if (PQfformat(res->result.pq, col) != 1)
                 ERROR("[%zu:%zu] PQfformat is not binary: %d", row, col, PQfformat(res->result.pq, col));
     
-            if (size && PQgetlength(res->result.pq, row, col) != size)
-                ERROR("[%zu:%zu] field size mismatch: %zu -> %d", row, col, size, PQgetlength(res->result.pq, row, col));
-
-            *ptr = PQgetvalue(res->result.pq, row, col);
+            *size = PQgetlength(res->result.pq, row, col);
+            *ptr  = PQgetvalue(res->result.pq, row, col);
 
             return 0;
 
         default:
             FATAL("res->evsql->type");
     }
+
+error:
+    return -1;
+}
+
+int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t size, int nullok) {
+    size_t real_size;
+
+    if (evsql_result_buf(res, row, col, ptr, &real_size, nullok))
+        goto error;
+
+    if (size && real_size != size)
+        ERROR("[%zu:%zu] field size mismatch: %zu -> %zu", row, col, size, real_size);
+     
+    return 0;
 
 error:
     return -1;

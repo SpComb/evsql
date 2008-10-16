@@ -231,6 +231,7 @@ size_t evsql_result_cols (const struct evsql_result_info *res);
 
 // fetch the raw binary value from a result set, and return it via ptr
 // if size is nonzero, check that the size of the field data matches
+int evsql_result_buf    (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok);
 int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t size, int nullok);
 int evsql_result_string (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, int nullok);
 

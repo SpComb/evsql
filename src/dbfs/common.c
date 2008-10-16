@@ -50,14 +50,15 @@ int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_
     int err = 0;
     
     uint16_t mode;
-    uint64_t size, nlink;
+    uint32_t size = 0;  // NULL for non-REG inodes
+    uint64_t nlink;
     const char *type;
     
     // extract the data
     if (0
         ||  evsql_result_string(res, row, col_offset + 0, &type,       0 ) // inodes.type
         ||  evsql_result_uint16(res, row, col_offset + 1, &mode,       0 ) // inodes.mode
-        ||  evsql_result_uint64(res, row, col_offset + 2, &size,       0 ) // inodes.size
+        ||  evsql_result_uint32(res, row, col_offset + 2, &size,       1 ) // size
         ||  evsql_result_uint64(res, row, col_offset + 3, &nlink,      0 ) // count(*)
     )
         EERROR(err = EIO, "invalid db data");

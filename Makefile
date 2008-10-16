@@ -19,8 +19,8 @@ BIN_NAMES = helloworld hello simple_hello evpq_test url_test dbfs
 BIN_PATHS = $(addprefix bin/,$(BIN_NAMES))
 
 # complex modules
-EVSQL_OBJS = obj/evsql.o obj/evsql_util.o obj/evpq.o
-DBFS_OBJS = obj/dbfs/dbfs.o obj/dbfs/common.o obj/dbfs/core.o obj/dbfs/op_base.o obj/dbfs/dirop.o obj/dirbuf.o
+EVSQL_OBJS = obj/evsql/evsql.o obj/evsql/util.o obj/evpq.o
+DBFS_OBJS = obj/dbfs/dbfs.o obj/dbfs/common.o obj/dbfs/core.o obj/dbfs/op_base.o obj/dbfs/dirop.o obj/dirbuf.o obj/dbfs/fileop.o
 
 # first target
 all: ${BIN_PATHS}

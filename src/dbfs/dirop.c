@@ -228,12 +228,12 @@ error:
  */
 void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi) {
     struct dbfs *ctx = fuse_req_userdata(req);
-    struct dbfs_dirop *dirop = (struct dbfs_dirop *) fi->fh;
+    struct dbfs_dirop *dirop;
     int err;
 
     // get the op
     if ((dirop = (struct dbfs_dirop *) dbfs_op_req(req, ino, fi)) == NULL)
-        SERROR(err = EIO);
+        return;
     
     INFO("[dbfs.readdir %p:%p] ino=%lu, size=%zu, off=%zu, fi=%p : trans=%p", dirop, req, ino, size, off, fi, dirop->base.trans);
 

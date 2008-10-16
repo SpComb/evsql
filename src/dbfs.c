@@ -38,8 +38,8 @@ int main (int argc, char **argv) {
         ERROR("signals_default");
 
     // setup dbfs
-    if ((ctx = dbfs_open(ev_base, &fuse_args, db_conninfo)) == NULL)
-        ERROR("dbfs_open");
+    if ((ctx = dbfs_new(ev_base, &fuse_args, db_conninfo)) == NULL)
+        ERROR("dbfs_new");
 
     // run libevent
     INFO("running libevent loop");
@@ -51,7 +51,7 @@ int main (int argc, char **argv) {
 
 error :
     if (ctx)
-        dbfs_release(ctx);
+        dbfs_free(ctx);
     
     if (signals)
         signals_free(signals);

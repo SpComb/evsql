@@ -4,7 +4,6 @@
 #include "dbfs.h"
 #include "../dbfs.h"
 #include "../lib/log.h"
-#include "../lib/misc.h"
 
 static struct fuse_lowlevel_ops dbfs_llops = {
 
@@ -14,6 +13,12 @@ static struct fuse_lowlevel_ops dbfs_llops = {
     .lookup         = dbfs_lookup,
 
     .getattr        = dbfs_getattr,
+
+    .open           = dbfs_open,
+    .read           = dbfs_read,
+    // .write       = dbfs_write,
+    .flush          = dbfs_flush,
+    .release        = dbfs_release,
 
     .opendir        = dbfs_opendir,
     .readdir        = dbfs_readdir,
@@ -43,7 +48,7 @@ void dbfs_sql_error (struct evsql *evsql, void *arg) {
     event_base_loopbreak(ctx->ev_base);
 }
 
-struct dbfs *dbfs_open (struct event_base *ev_base, struct fuse_args *args, const char *db_conninfo) {
+struct dbfs *dbfs_new (struct event_base *ev_base, struct fuse_args *args, const char *db_conninfo) {
     struct dbfs *ctx = NULL;
 
     // alloc ctx
@@ -66,12 +71,12 @@ struct dbfs *dbfs_open (struct event_base *ev_base, struct fuse_args *args, cons
 
 error:
     if (ctx)
-        dbfs_release(ctx);
+        dbfs_free(ctx);
 
     return NULL;
 }    
 
-void dbfs_release (struct dbfs *ctx) {
+void dbfs_free (struct dbfs *ctx) {
     // cleanup
     if (ctx->ev_fuse) {
         evfuse_free(ctx->ev_fuse);

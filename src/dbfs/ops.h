@@ -16,4 +16,10 @@ void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *
 void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
 void dbfs_releasedir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
 
+/* fileop.c */
+void dbfs_open (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
+void dbfs_read (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
+void dbfs_flush (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
+void dbfs_release (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
+
 #endif /* DBFS_OPS_H */

@@ -57,10 +57,10 @@ void dbfs_lookup (struct fuse_req *req, fuse_ino_t parent, const char *name) {
     // query and params
     const char *sql = 
         "SELECT"
-        " inodes.ino, inodes.type, inodes.mode, inodes.size, count(*)"
+        " inodes.ino, inodes.type, inodes.mode, dbfs_lo_size(data), count(*)"
         " FROM file_tree INNER JOIN inodes ON (file_tree.inode = inodes.ino)"
         " WHERE file_tree.parent = $1::int4 AND file_tree.name = $2::varchar"
-        " GROUP BY inodes.ino, inodes.type, inodes.mode, inodes.size";
+        " GROUP BY inodes.ino, inodes.type, inodes.mode, data";
     
     static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
         EVSQL_PARAM ( UINT32 ),
@@ -130,10 +130,10 @@ void dbfs_getattr (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *
 
     const char *sql =
         "SELECT"
-        " inodes.type, inodes.mode, inodes.size, count(*)"
+        " inodes.type, inodes.mode, dbfs_lo_size(data), count(*)"
         " FROM inodes"
         " WHERE inodes.ino = $1::int4"
-        " GROUP BY inodes.type, inodes.mode, inodes.size";
+        " GROUP BY inodes.type, inodes.mode, data";
 
     static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
         EVSQL_PARAM ( UINT32 ),
