@@ -25,3 +25,4 @@ CREATE FUNCTION lo_pread (IN fd int4, IN len int4, IN "off" int4) RETURNS bytea 
 CREATE FUNCTION lo_pwrite (IN fd int4, IN buf bytea, IN "off" int4) RETURNS int4 LANGUAGE SQL STRICT AS 'select lo_lseek($1, $3, 0); select lowrite($1, $2);';
 CREATE FUNCTION lo_otruncate (IN oid, IN len int4) RETURNS oid LANGUAGE SQL STRICT AS 'select lo_truncate(lo_open($1, 393216), $2); select $1;';
 
+ALTER TABLE inodes ADD COLUMN symlink varchar(512);

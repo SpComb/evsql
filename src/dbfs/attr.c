@@ -29,12 +29,12 @@ void _dbfs_attr_res (const struct evsql_result_info *res, void *arg) {
         
     INFO("[dbfs.getattr %p] -> ino=%lu, stat follows", req, (unsigned long int) ino);
     
+    // inode
+    st.st_ino = ino;
+
     // stat attrs
     if ((err = _dbfs_stat_info(&st, res, 0, 1)))
         goto error;
-
-    // XXX: we don't have the ino
-    st.st_ino = ino;
 
     // reply
     if ((err = fuse_reply_attr(req, &st, st.st_nlink ? CACHE_TIMEOUT : 0)))

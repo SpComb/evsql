@@ -10,6 +10,9 @@ mode_t _dbfs_mode (const char *type) {
 
     if (!strcmp(type, "REG"))
         return S_IFREG;
+    
+    if (!strcmp(type, "LNK"))
+        return S_IFLNK;
 
     else {
         WARNING("[dbfs] weird mode-type: %s", type);

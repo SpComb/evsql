@@ -11,9 +11,10 @@ static struct fuse_lowlevel_ops dbfs_llops = {
     .destroy        = dbfs_destroy,
     
     .lookup         = dbfs_lookup,
-
+    // .forget
     .getattr        = dbfs_getattr,
     .setattr        = dbfs_setattr,
+    .readlink       = dbfs_readlink,
 
     .open           = dbfs_open,
     .read           = dbfs_read,
