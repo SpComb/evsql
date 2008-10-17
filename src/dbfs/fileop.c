@@ -39,7 +39,7 @@ static void dbfs_open_res (const struct evsql_result_info *res, void *arg) {
 
     // is it a dir?
     if (_dbfs_mode(type) != S_IFREG)
-        EERROR(err = ENOENT, "wrong type: %s", type);
+        EERROR(err = EINVAL, "wrong type: %s", type);
     
     INFO("[dbfs.open %p:%p] -> ino=%lu, type=%s", fop, fop->base.req, (unsigned long int) fop->base.ino, type);
     

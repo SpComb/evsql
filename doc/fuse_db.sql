@@ -31,6 +31,7 @@ CREATE SEQUENCE ino_seq START 64;
 ALTER TABLE inodes ALTER COLUMN ino SET DEFAULT nextval('ino_seq'::regclass);
 
 ALTER TABLE file_tree ADD COLUMN ino int4;
+ALTER TABLE file_tree ADD CONSTRAINT file_tree_ino_fkey FOREIGN KEY (ino) REFERENCES inodes (ino);
 UPDATE file_tree SET ino = inode;
 ALTER TABLE file_tree DROP COLUMN inode;
 
@@ -41,4 +42,3 @@ CREATE FUNCTION dbfs_size (type char, oid, link varchar) RETURNS int4 LANGUAGE S
         ELSE 0 
     END;
 $$;
-

@@ -16,12 +16,16 @@ void dbfs_setattr(struct fuse_req *req, fuse_ino_t ino, struct stat *attr, int t
 
 /* link.c */
 void dbfs_readlink (struct fuse_req *req, fuse_ino_t ino);
-void dbfs_symlink (struct fuse_req *req, const char *link, fuse_ino_t parent, const char *name);
 
 /* dirop.c */
 void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
 void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
 void dbfs_releasedir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
+
+/* mk.c */
+void dbfs_mknod (struct fuse_req *req, fuse_ino_t parent, const char *name, mode_t mode, dev_t rdev);
+void dbfs_mkdir (struct fuse_req *req, fuse_ino_t parent, const char *name, mode_t mode);
+void dbfs_symlink (struct fuse_req *req, const char *link, fuse_ino_t parent, const char *name);
 
 /* tree.c */
 void dbfs_rename (struct fuse_req *req, fuse_ino_t parent, const char *name, fuse_ino_t newparent, const char *newname);
