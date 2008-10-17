@@ -240,6 +240,9 @@ size_t evsql_result_rows (const struct evsql_result_info *res);
 // number of columns in the result
 size_t evsql_result_cols (const struct evsql_result_info *res);
 
+// number of affected rows for UPDATE/INSERT
+size_t evsql_result_affected (const struct evsql_result_info *res);
+
 // fetch the raw binary value from a result set, and return it via ptr
 // if size is nonzero, check that the size of the field data matches
 int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok);

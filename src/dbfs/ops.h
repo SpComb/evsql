@@ -23,6 +23,9 @@ void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *
 void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
 void dbfs_releasedir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
 
+/* tree.c */
+void dbfs_rename (struct fuse_req *req, fuse_ino_t parent, const char *name, fuse_ino_t newparent, const char *newname);
+
 /* fileop.c */
 void dbfs_open (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
 void dbfs_read (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);

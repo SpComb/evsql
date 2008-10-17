@@ -28,7 +28,7 @@ int _dbfs_check_res (const struct evsql_result_info *res, size_t rows, size_t co
         NERROR(evsql_result_error(res));
         
     // not found?
-    if (evsql_result_rows(res) == 0)
+    if (evsql_result_rows(res) == 0 && evsql_result_affected(res) == 0)
         SERROR(err = 1);
 
     // duplicate rows?
@@ -48,6 +48,8 @@ error:
 
     return err;
 }
+
+
 
 int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_t row, size_t col_offset) {
     int err = 0;

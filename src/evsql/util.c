@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <assert.h>
 
 #include "evsql.h"
@@ -143,6 +144,16 @@ size_t evsql_result_cols (const struct evsql_result_info *res) {
     switch (res->evsql->type) {
         case EVSQL_EVPQ:
             return PQnfields(res->result.pq);
+
+        default:
+            FATAL("res->evsql->type");
+    }
+}
+
+size_t evsql_result_affected (const struct evsql_result_info *res) {
+    switch (res->evsql->type) {
+        case EVSQL_EVPQ:
+            return strtol(PQcmdTuples(res->result.pq), NULL, 10);
 
         default:
             FATAL("res->evsql->type");

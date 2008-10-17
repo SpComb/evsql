@@ -257,6 +257,7 @@ void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off,
         " file_tree.\"offset\", file_tree.name, inodes.ino, inodes.type"
         " FROM file_tree LEFT OUTER JOIN inodes ON (file_tree.ino = inodes.ino)"
         " WHERE file_tree.parent = $1::int4 AND file_tree.\"offset\" >= $2::int4"
+        " ORDER BY file_tree.\"offset\""
         " LIMIT $3::int4";
 
     static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
