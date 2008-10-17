@@ -14,8 +14,6 @@
  * Structs and functions shared between all dbfs components
  */
 
-#define SERROR(val) do { (val); goto error; } while(0)
-
 struct dbfs {
     struct event_base *ev_base;
     
@@ -29,8 +27,7 @@ struct dbfs {
 #define CACHE_TIMEOUT 1.0
 
 // columns used for stat_info
-#define DBFS_STAT_COLS " inodes.type, inodes.mode, lo_size(data), count(*) "
-#define DBFS_STAT_COLS_NOAGGREGATE " inodes.type, inodes.mode, lo_size(data), NULL "
+#define DBFS_STAT_COLS " inodes.type, inodes.mode, dbfs_size(inodes.type, inodes.data, inodes.link_path), (SELECT COUNT(*) FROM inodes i LEFT JOIN file_tree ft ON (i.ino = ft.ino) WHERE i.ino = inodes.ino) AS nlink"
 
 /*
  * Convert the CHAR(4) inodes.type from SQL into a mode_t.

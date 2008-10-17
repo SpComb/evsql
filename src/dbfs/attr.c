@@ -60,8 +60,7 @@ void dbfs_getattr (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *
         "SELECT"
         " inodes.ino, " DBFS_STAT_COLS
         " FROM inodes"
-        " WHERE inodes.ino = $1::int4"
-        " GROUP BY inodes.ino, inodes.type, inodes.mode, data";
+        " WHERE inodes.ino = $1::int4";
 
     static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
         EVSQL_PARAM ( UINT32 ),
@@ -137,7 +136,7 @@ void dbfs_setattr (struct fuse_req *req, fuse_ino_t ino, struct stat *attr, int 
         "UPDATE inodes SET"
         " %s%s%s%s ino = ino"
         " WHERE inodes.ino = $5::int4"
-        " RETURNING inodes.ino, " DBFS_STAT_COLS_NOAGGREGATE,
+        " RETURNING inodes.ino, " DBFS_STAT_COLS,
         
         FIELD(to_set, FUSE_SET_ATTR_MODE,   "mode", "$1::int2"),
         FIELD(to_set, FUSE_SET_ATTR_UID,    "uid",  "$2::int4"),

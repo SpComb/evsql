@@ -16,6 +16,8 @@ static struct fuse_lowlevel_ops dbfs_llops = {
     .setattr        = dbfs_setattr,
     .readlink       = dbfs_readlink,
 
+    .symlink        = dbfs_symlink,
+
     .open           = dbfs_open,
     .read           = dbfs_read,
     .write          = dbfs_write,

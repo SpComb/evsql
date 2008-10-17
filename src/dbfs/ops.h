@@ -14,8 +14,9 @@ void dbfs_lookup (struct fuse_req *req, fuse_ino_t parent, const char *name);
 void dbfs_getattr (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
 void dbfs_setattr(struct fuse_req *req, fuse_ino_t ino, struct stat *attr, int to_set, struct fuse_file_info *fi);
 
-/* symlink.c */
+/* link.c */
 void dbfs_readlink (struct fuse_req *req, fuse_ino_t ino);
+void dbfs_symlink (struct fuse_req *req, const char *link, fuse_ino_t parent, const char *name);
 
 /* dirop.c */
 void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);

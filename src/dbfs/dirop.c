@@ -94,8 +94,8 @@ static void dbfs_dirop_open (struct dbfs_op *op_base) {
     const char *sql =
         "SELECT"
         " file_tree.parent, inodes.type"
-        " FROM file_tree LEFT OUTER JOIN inodes ON (file_tree.inode = inodes.ino)"
-        " WHERE file_tree.inode = $1::int4";
+        " FROM file_tree LEFT OUTER JOIN inodes ON (file_tree.ino = inodes.ino)"
+        " WHERE file_tree.ino = $1::int4";
 
     static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
         EVSQL_PARAM ( UINT32 ),
@@ -255,7 +255,7 @@ void dbfs_readdir (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off,
     const char *sql = 
         "SELECT"
         " file_tree.\"offset\", file_tree.name, inodes.ino, inodes.type"
-        " FROM file_tree LEFT OUTER JOIN inodes ON (file_tree.inode = inodes.ino)"
+        " FROM file_tree LEFT OUTER JOIN inodes ON (file_tree.ino = inodes.ino)"
         " WHERE file_tree.parent = $1::int4 AND file_tree.\"offset\" >= $2::int4"
         " LIMIT $3::int4";
 
