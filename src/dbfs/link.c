@@ -85,6 +85,7 @@ void dbfs_unlink_res (const struct evsql_result_info *res, void *arg) {
     int err = 0;
     
     // check the results
+    // XXX: reply with ENOTEMPTY if it fails due to this inode being a dir
     if ((err = dbfs_check_result(res, 1, 0)))
         goto error;
         
@@ -140,3 +141,4 @@ error:
     if ((err = fuse_reply_err(req, err)))
         EWARNING(err, "fuse_reply_err");
 }
+
