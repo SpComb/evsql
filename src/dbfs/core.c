@@ -24,7 +24,7 @@ void _dbfs_lookup_result (const struct evsql_result_info *res, void *arg) {
     )
         EERROR(err = EIO, "invalid db data");
         
-    INFO("[dbfs.lookup] -> ino=%u", ino);
+    INFO("\t[dbfs.lookup] -> ino=%u", ino);
     
     // stat attrs
     if ((err = _dbfs_stat_info(&e.attr, res, 0, 1)))

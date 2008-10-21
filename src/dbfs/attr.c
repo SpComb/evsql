@@ -27,7 +27,7 @@ void _dbfs_attr_res (const struct evsql_result_info *res, void *arg) {
         EERROR(err = EIO, "invalid db data");
  
         
-    INFO("[dbfs.getattr %p] -> ino=%lu, stat follows", req, (unsigned long int) ino);
+    INFO("\t[dbfs.getattr %p] -> ino=%lu, stat follows", req, (unsigned long int) ino);
     
     // inode
     st.st_ino = ino;

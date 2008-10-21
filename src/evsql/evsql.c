@@ -23,6 +23,8 @@ static void _evsql_pump (struct evsql *evsql, struct evsql_conn *conn);
 static int _evsql_query_exec (struct evsql_conn *conn, struct evsql_query *query, const char *command) {
     int err;
 
+    DEBUG("evsql.%p: exec query=%p on trans=%p on conn=%p:", conn->evsql, query, conn->trans, conn);
+
     switch (conn->evsql->type) {
         case EVSQL_EVPQ:
             // got params?
@@ -889,6 +891,12 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
     // execute it
     if (_evsql_query_enqueue(evsql, trans, query, command))
         goto error;
+
+#ifdef DEBUG_ENABLED
+    // debug it?
+    DEBUG("evsql.%p: enqueued query=%p on trans=%p", evsql, query, trans);
+    evsql_query_debug(command, params);
+#endif /* DEBUG_ENABLED */
 
     // ok
     return query;

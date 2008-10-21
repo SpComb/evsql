@@ -58,7 +58,7 @@ static void dbfs_opendir_res (const struct evsql_result_info *res, void *arg) {
     if (_dbfs_mode(type) != S_IFDIR)
         EERROR(err = ENOTDIR, "wrong type: %s", type);
     
-    INFO("[dbfs.opendir %p:%p] -> ino=%lu, parent=%lu, type=%s", dirop, dirop->base.req, (unsigned long int) dirop->base.ino, (unsigned long int) dirop->parent, type);
+    INFO("\t[dbfs.opendir %p:%p] -> ino=%lu, parent=%lu, type=%s", dirop, dirop->base.req, (unsigned long int) dirop->base.ino, (unsigned long int) dirop->parent, type);
     
     // open_fn done, do the open_reply
     if ((err = dbfs_op_open_reply(&dirop->base)))
@@ -88,7 +88,7 @@ static void dbfs_dirop_open (struct dbfs_op *op_base) {
     assert(dirop->base.req);
     assert(!dirop->base.open);
 
-    INFO("[dbfs.opendir %p:%p] -> trans=%p", dirop, dirop->base.req, dirop->base.trans);
+    INFO("\t[dbfs.opendir %p:%p] -> trans=%p", dirop, dirop->base.req, dirop->base.trans);
     
     // first fetch info about the dir itself
     const char *sql =
@@ -173,7 +173,7 @@ static void dbfs_readdir_res (const struct evsql_result_info *res, void *arg) {
     if ((err = _dbfs_check_res(res, 0, 4)) < 0)
         SERROR(err = EIO);
         
-    INFO("[dbfs.readdir %p:%p] -> files: res_rows=%zu", dirop, dirop->base.req, evsql_result_rows(res));
+    INFO("\t[dbfs.readdir %p:%p] -> files: res_rows=%zu", dirop, dirop->base.req, evsql_result_rows(res));
         
     // iterate over the rows
     for (row = 0; row < evsql_result_rows(res); row++) {

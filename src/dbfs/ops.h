@@ -16,6 +16,7 @@ void dbfs_setattr(struct fuse_req *req, fuse_ino_t ino, struct stat *attr, int t
 
 /* link.c */
 void dbfs_readlink (struct fuse_req *req, fuse_ino_t ino);
+void dbfs_unlink (struct fuse_req *req, fuse_ino_t parent, const char *name);
 
 /* dirop.c */
 void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);

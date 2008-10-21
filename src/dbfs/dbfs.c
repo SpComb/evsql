@@ -17,6 +17,7 @@ static struct fuse_lowlevel_ops dbfs_llops = {
     .readlink       = dbfs_readlink,
     .mknod          = dbfs_mknod,
     .mkdir          = dbfs_mkdir,
+    .unlink         = dbfs_unlink,
     
     .symlink        = dbfs_symlink,
     .rename         = dbfs_rename,

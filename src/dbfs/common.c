@@ -49,7 +49,35 @@ error:
     return err;
 }
 
+err_t dbfs_check_result (const struct evsql_result_info *res, size_t rows, size_t cols) {
+    int err;
 
+    // number of rows returned/affected
+    size_t nrows = evsql_result_rows(res) ? : evsql_result_affected(res);
+
+    // did the query fail outright?
+    if (res->error)
+        // dump error message
+        NXERROR(err = EIO, evsql_result_error(res));
+    
+    // SELECT/DELETE/UPDATE WHERE didn't match any rows -> ENOENT
+    if (nrows == 0)
+        XERROR(err = ENOENT, "no rows returned/affected");
+    
+    // duplicate rows where one expected?
+    if (rows && nrows != rows)
+        XERROR(err = EIO, "wrong number of rows: %zu -> %zu", rows, nrows);
+    
+    // correct number of columns
+    if (evsql_result_cols(res) != cols)
+        XERROR(err = EIO, "wrong number of columns: %zu -> %zu", cols, evsql_result_cols(res));
+
+    // good
+    return 0;
+
+error:
+    return err;
+}
 
 int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_t row, size_t col_offset) {
     int err = 0;

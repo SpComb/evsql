@@ -41,7 +41,7 @@ static void dbfs_open_res (const struct evsql_result_info *res, void *arg) {
     if (_dbfs_mode(type) != S_IFREG)
         EERROR(err = EINVAL, "wrong type: %s", type);
     
-    INFO("[dbfs.open %p:%p] -> ino=%lu, type=%s", fop, fop->base.req, (unsigned long int) fop->base.ino, type);
+    INFO("\t[dbfs.open %p:%p] -> ino=%lu, type=%s", fop, fop->base.req, (unsigned long int) fop->base.ino, type);
     
     // open_fn done, do the open_reply
     if ((err = dbfs_op_open_reply(&fop->base)))
@@ -142,7 +142,7 @@ void dbfs_read_res (const struct evsql_result_info *res, void *arg) {
     if (evsql_result_binary(res, 0, 0, &buf, &size, 0))
         SERROR(err = EIO);
 
-    INFO("[dbfs.read %p:%p] -> size=%zu", fop, fop->base.req, size);
+    INFO("\t[dbfs.read %p:%p] -> size=%zu", fop, fop->base.req, size);
         
     // send it
     if ((err = fuse_reply_buf(fop->base.req, buf, size)))
@@ -221,7 +221,7 @@ void dbfs_write_res (const struct evsql_result_info *res, void *arg) {
     if (evsql_result_uint32(res, 0, 0, &size, 0))
         SERROR(err = EIO);
 
-    INFO("[dbfs.write %p:%p] -> size=%lu", fop, fop->base.req, (long unsigned int) size);
+    INFO("\t[dbfs.write %p:%p] -> size=%lu", fop, fop->base.req, (long unsigned int) size);
         
     // send it
     if ((err = fuse_reply_write(fop->base.req, size)))

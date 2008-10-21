@@ -23,6 +23,9 @@ struct dbfs {
     struct evfuse *ev_fuse;
 };
 
+// used for error returns
+typedef int err_t;
+
 // XXX: not sure how this should work
 #define CACHE_TIMEOUT 1.0
 
@@ -48,6 +51,11 @@ mode_t _dbfs_mode (const char *type);
  *  1   there were no results (zero rows)
  */
 int _dbfs_check_res (const struct evsql_result_info *res, size_t rows, size_t cols);
+
+/*
+ * Same as _dbfs_check_res, but returns ENOENT/EIO directly
+ */
+err_t dbfs_check_result (const struct evsql_result_info *res, size_t rows, size_t cols);
 
 /*
  * Fill a `struct state` with info retrieved from a SQL query.
