@@ -5,15 +5,24 @@ LIBRARY_PATHS = -L${LIBEVENT_PATH}/lib -L${LIBFUSE_PATH}/lib
 INCLUDE_PATHS = -I${LIBEVENT_PATH}/include -I${LIBFUSE_PATH}/include
 LDLIBS = -levent -lfuse -lpq
 
-ifdef DEBUG
-DEBUG_FLAGS = -DDEBUG_ENABLED
-else
-DEBUG_FLAGS = 
+# default is TEST
+ifndef MODE
+MODE = TEST
+endif
+
+ifeq ($(MODE), DEBUG)
+MODE_CFLAGS = -g -DDEBUG_ENABLED
+else ifeq ($(MODE), DEV)
+MODE_CFLAGS = -g
+else ifeq ($(MODE), TEST)
+MODE_CFLAGS = -g -DINFO_DISABLED
+else ifeq ($(MODE), RELEASE)
+MODE_CFLAGS = -DINFO_DISABLED -O2
 endif
 
 # XXX: ugh... use `pkg-config fuse`
-DEFINES = -D_FILE_OFFSET_BITS=64 ${DEBUG_FLAGS}
-MY_CFLAGS = -Wall -g -std=gnu99
+DEFINES = -D_FILE_OFFSET_BITS=64
+MY_CFLAGS = -Wall -std=gnu99 $(MODE_CFLAGS)
 
 BIN_NAMES = helloworld hello simple_hello evpq_test url_test dbfs
 BIN_PATHS = $(addprefix bin/,$(BIN_NAMES))

@@ -133,4 +133,8 @@ struct evsql_query {
 // maximum length for a 'BEGIN TRANSACTION ...' query
 #define EVSQL_QUERY_BEGIN_BUF 512
 
+// the should the OID of some valid psql type... *ANY* valid psql type, doesn't matter, only used for NULLs
+// 16 = bool in 8.3
+#define EVSQL_PQ_ARBITRARY_TYPE_OID 16
+
 #endif /* EVSQL_INTERNAL_H */

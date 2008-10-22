@@ -70,7 +70,7 @@ int dirbuf_done (fuse_req_t req, struct dirbuf *buf) {
     int err;
     
     // send the reply, return the error later
-    err = fuse_reply_buf(req, buf->buf, buf->off);
+    err = -fuse_reply_buf(req, buf->buf, buf->off);
 
     DEBUG("\tdirbuf.done: size=%zu/%zu, err=%d", buf->off, buf->len, err);
 

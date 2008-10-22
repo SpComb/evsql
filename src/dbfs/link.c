@@ -39,11 +39,11 @@ void dbfs_entry_res (const struct evsql_result_info *res, void *arg) {
     e.entry_timeout = CACHE_TIMEOUT;
         
     // reply
-    if ((err = fuse_reply_entry(req, &e)))
+    if ((err = -fuse_reply_entry(req, &e)))
         EERROR(err, "fuse_reply_entry");
 
 error:
-    if (err && (err = fuse_reply_err(req, err)))
+    if (err && (err = -fuse_reply_err(req, err)))
         EWARNING(err, "fuse_reply_err");
 
     // free
@@ -87,7 +87,7 @@ void dbfs_lookup (struct fuse_req *req, fuse_ino_t parent, const char *name) {
     return;
 
 error:
-    if ((err = fuse_reply_err(req, err)))
+    if ((err = -fuse_reply_err(req, err)))
         EWARNING(err, "fuse_reply_err");
 }
 
@@ -117,11 +117,11 @@ void _dbfs_readlink_res (const struct evsql_result_info *res, void *arg) {
     INFO("\t[dbfs.readlink %p] -> ino=%lu, type=%s, link=%s", req, (unsigned long int) ino, type, link);
     
     // reply
-    if ((err = fuse_reply_readlink(req, link)))
+    if ((err = -fuse_reply_readlink(req, link)))
         EERROR(err, "fuse_reply_readlink");
 
 error:
-    if (err && (err = fuse_reply_err(req, err)))
+    if (err && (err = -fuse_reply_err(req, err)))
         EWARNING(err, "fuse_reply_err");
 
     // free
@@ -162,7 +162,7 @@ void dbfs_readlink (struct fuse_req *req, fuse_ino_t ino) {
     return;
 
 error:
-    if ((err = fuse_reply_err(req, err)))
+    if ((err = -fuse_reply_err(req, err)))
         EWARNING(err, "fuse_reply_err");
 
 }
@@ -181,11 +181,11 @@ void dbfs_unlink_res (const struct evsql_result_info *res, void *arg) {
     INFO("\t[dbfs.unlink %p] -> OK", req);
     
     // reply
-    if ((err = fuse_reply_err(req, 0)))
-        EERROR(err, "fuse_reply_readlink");
+    if ((err = -fuse_reply_err(req, 0)))
+        EERROR(err, "fuse_reply_err");
 
 error:
-    if (err && (err = fuse_reply_err(req, err)))
+    if (err && (err = -fuse_reply_err(req, err)))
         EWARNING(err, "fuse_reply_err");
 
     // free
@@ -227,7 +227,7 @@ void dbfs_unlink (struct fuse_req *req, fuse_ino_t parent, const char *name) {
     return;
 
 error:
-    if ((err = fuse_reply_err(req, err)))
+    if ((err = -fuse_reply_err(req, err)))
         EWARNING(err, "fuse_reply_err");
 }
 
@@ -266,6 +266,6 @@ void dbfs_link (struct fuse_req *req, fuse_ino_t ino, fuse_ino_t newparent, cons
     return;
 
 error:
-    if ((err = fuse_reply_err(req, err)))
+    if ((err = -fuse_reply_err(req, err)))
         EWARNING(err, "fuse_reply_err");   
 }

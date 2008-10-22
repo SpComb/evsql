@@ -88,7 +88,8 @@ extern enum _debug_level _cur_debug_level;
 #define INFO(...) info(__VA_ARGS__)
 #define INFON(...) info_nonl(__VA_ARGS__)
 #else
-#define INFO(...) (void) (__VA_ARGS__)
+#define INFO(...) debug_dummy(0, __VA_ARGS__)
+#define INFON(...) debug_dummy(0, __VA_ARGS__)
 #endif
 
 #endif /* LIB_LOG_H */

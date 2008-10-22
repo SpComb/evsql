@@ -192,12 +192,26 @@ struct dbfs_op *dbfs_op_req (struct fuse_req *req, fuse_ino_t ino, struct fuse_f
     
     // validate
     assert(op);
-    assert(!op->req);
     assert(op->open);
     assert(op->ino == ino);
+    
+    // detect concurrent requests
+    if (op->req) {
+        // must handle req ourself, shouldn't fail the other req
+        WARNING("op.%p: concurrent req: %p -> %p", op, op->req, req);
+        
+        // XXX: ignore error errors...
+        fuse_reply_err(req, EBUSY);
 
-    // store the new req
-    op->req = req;
+        return NULL;
+
+    } else
+        // store the new req
+        op->req = req;
+    
+    // inodes change?
+    if (op->ino != ino)
+        XERROR(err = EBADF, "op.%p: wrong ino: %u -> %lu", op, op->ino, ino);
     
     // detect earlier failures
     if (!op->trans && (err = EIO))

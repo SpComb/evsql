@@ -7,10 +7,17 @@
 #include "op_base.h"
 #include "../lib/log.h"
 
+/*
+ * A file-operation, i.e. a sequence consisting of an OPEN, a multitude of READ/WRITE, followed by zero or more FLUSHes, and finally a single RELEASE.
+ *
+ * For historical reasons this opens a transaction and keeps it between open/release, but reads/writes now use the oid directly and are transactionless.
+ */
+
 struct dbfs_fileop {
     struct dbfs_op base;
-
-    uint32_t lo_fd;
+    
+    uint32_t oid;
+//    uint32_t lo_fd;
 };
 
 static void _dbfs_fileop_free (struct dbfs_op *op_base) {
@@ -33,7 +40,7 @@ static void dbfs_open_res (const struct evsql_result_info *res, void *arg) {
     // extract the data
     if (0
         ||  evsql_result_string(res, 0, 0, &type,           0 ) // inodes.type
-        ||  evsql_result_uint32(res, 0, 1, &fop->lo_fd,     0 ) // fd
+        ||  evsql_result_uint32(res, 0, 1, &fop->oid,       0 ) // inodes.data
     )
         SERROR(err = EIO);
 
@@ -67,12 +74,11 @@ static void dbfs_fileop_open (struct dbfs_op *op_base) {
     // make sure the file actually exists
     const char *sql =
         "SELECT"
-        " inodes.type, lo_open(inodes.data, $1::int4) AS fd"
+        " inodes.type, inodes.data"
         " FROM inodes"
-        " WHERE inodes.ino = $2::int4";
+        " WHERE inodes.ino = $1::int4";
 
     static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
-        EVSQL_PARAM ( UINT32 ),
         EVSQL_PARAM ( UINT32 ),
 
         EVSQL_PARAMS_END
@@ -80,8 +86,7 @@ static void dbfs_fileop_open (struct dbfs_op *op_base) {
 
     // build params
     if (0
-        ||  evsql_param_uint32(&params, 0, INV_READ | INV_WRITE)
-        ||  evsql_param_uint32(&params, 1, fop->base.ino)
+        ||  evsql_param_uint32(&params, 0, fop->base.ino)
     )
         SERROR(err = EIO);
         
@@ -123,13 +128,13 @@ error:
 
     } else {
         // must error out manually as we couldn't alloc the context
-        if ((err = fuse_reply_err(req, err)))
+        if ((err = -fuse_reply_err(req, err)))
             EWARNING(err, "fuse_reply_err");
     }
 }
 
 void dbfs_read_res (const struct evsql_result_info *res, void *arg) {
-    struct dbfs_fileop *fop = arg;
+    struct fuse_req *req = arg;
     int err;
     const char *buf;
     size_t size;
@@ -142,22 +147,19 @@ void dbfs_read_res (const struct evsql_result_info *res, void *arg) {
     if (evsql_result_binary(res, 0, 0, &buf, &size, 0))
         SERROR(err = EIO);
 
-    INFO("\t[dbfs.read %p:%p] -> size=%zu", fop, fop->base.req, size);
+    INFO("\t[dbfs.read %p] -> size=%zu", req, size);
         
     // send it
-    if ((err = fuse_reply_buf(fop->base.req, buf, size)))
+    if ((err = -fuse_reply_buf(req, buf, size)))
         EERROR(err, "fuse_reply_buf");
     
-    // ok, req handled
-    if ((err = dbfs_op_req_done(&fop->base)))
-        goto error;
-
     // good, fallthrough
     err = 0;
 
 error:
     if (err)
-        dbfs_op_fail(&fop->base, err);
+        fuse_reply_err(req, err);
+
 
     // free
     evsql_result_free(res);
@@ -165,51 +167,47 @@ error:
 
 void dbfs_read (struct fuse_req *req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi) {
     struct dbfs *ctx = fuse_req_userdata(req);
-    struct dbfs_fileop *fop;
     int err;
     
-    // get the op
-    if ((fop = (struct dbfs_fileop *) dbfs_op_req(req, ino, fi)) == NULL)
-        return;
-
     // log
-    INFO("[dbfs.read %p:%p] ino=%lu, size=%zu, off=%lu, fi->flags=%04X", fop, req, ino, size, off, fi->flags);
+    INFO("[dbfs.read %p] ino=%lu, size=%zu, off=%lu, fi->flags=%04X", req, ino, size, off, fi->flags);
 
     // query
     const char *sql = 
         "SELECT"
-        " lo_pread($1::int4, $2::int4, $3::int4)";
+        " lo_pread_oid(data, $1::int4, $2::int4)"
+        " FROM inodes"
+        " WHERE ino = $3::int4";
     
     static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
-        EVSQL_PARAM ( UINT32 ), // fd
         EVSQL_PARAM ( UINT32 ), // len
         EVSQL_PARAM ( UINT32 ), // off
+        EVSQL_PARAM ( UINT32 ), // ino
 
         EVSQL_PARAMS_END
     };
 
     // build params
     if (0
-        ||  evsql_param_uint32(&params, 0, fop->lo_fd)
-        ||  evsql_param_uint32(&params, 1, size)
-        ||  evsql_param_uint32(&params, 2, off)
+        ||  evsql_param_uint32(&params, 0, size)
+        ||  evsql_param_uint32(&params, 1, off)
+        ||  evsql_param_uint32(&params, 2, ino)
     )
         SERROR(err = EIO);
         
-    // query
-    if (evsql_query_params(ctx->db, fop->base.trans, sql, &params, dbfs_read_res, fop) == NULL)
+    // query, transactionless
+    if (evsql_query_params(ctx->db, NULL, sql, &params, dbfs_read_res, req) == NULL)
         SERROR(err = EIO);
 
     // ok, wait for the info results
     return;
 
 error:
-    // fail it
-    dbfs_op_fail(&fop->base, err);
+    fuse_reply_err(req, err);
 }
 
 void dbfs_write_res (const struct evsql_result_info *res, void *arg) {
-    struct dbfs_fileop *fop = arg;
+    struct fuse_req *req = arg;
     int err;
     uint32_t size;
  
@@ -221,22 +219,18 @@ void dbfs_write_res (const struct evsql_result_info *res, void *arg) {
     if (evsql_result_uint32(res, 0, 0, &size, 0))
         SERROR(err = EIO);
 
-    INFO("\t[dbfs.write %p:%p] -> size=%lu", fop, fop->base.req, (long unsigned int) size);
+    INFO("\t[dbfs.write %p] -> size=%lu", req, (long unsigned int) size);
         
     // send it
-    if ((err = fuse_reply_write(fop->base.req, size)))
+    if ((err = -fuse_reply_write(req, size)))
         EERROR(err, "fuse_reply_write");
-    
-    // ok, req handled
-    if ((err = dbfs_op_req_done(&fop->base)))
-        goto error;
 
     // good, fallthrough
     err = 0;
 
 error:
     if (err)
-        dbfs_op_fail(&fop->base, err);
+        fuse_reply_err(req, err);
 
     // free
     evsql_result_free(res);
@@ -244,47 +238,43 @@ error:
 
 void dbfs_write (struct fuse_req *req, fuse_ino_t ino, const char *buf, size_t size, off_t off, struct fuse_file_info *fi) {
     struct dbfs *ctx = fuse_req_userdata(req);
-    struct dbfs_fileop *fop;
     int err;
     
-    // get the op
-    if ((fop = (struct dbfs_fileop *) dbfs_op_req(req, ino, fi)) == NULL)
-        return;
-
     // log
-    INFO("[dbfs.write %p:%p] ino=%lu, size=%zu, off=%lu, fi->flags=%04X", fop, req, ino, size, off, fi->flags);
+    INFO("[dbfs.write %p] ino=%lu, size=%zu, off=%lu, fi->flags=%04X", req, ino, size, off, fi->flags);
 
     // query
     const char *sql = 
         "SELECT"
-        " lo_pwrite($1::int4, $2::bytea, $3::int4)";
+        " lo_pwrite_oid(data, $1::bytea, $2::int4)"
+        " FROM inodes"
+        " WHERE ino = $3::int4";
     
     static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
-        EVSQL_PARAM ( UINT32 ), // fd
         EVSQL_PARAM ( BINARY ), // buf
         EVSQL_PARAM ( UINT32 ), // off
+        EVSQL_PARAM ( UINT32 ), // oid
 
         EVSQL_PARAMS_END
     };
 
     // build params
     if (0
-        ||  evsql_param_uint32(&params, 0, fop->lo_fd)
-        ||  evsql_param_binary(&params, 1, buf, size)
-        ||  evsql_param_uint32(&params, 2, off)
+        ||  evsql_param_binary(&params, 0, buf, size)
+        ||  evsql_param_uint32(&params, 1, off)
+        ||  evsql_param_uint32(&params, 2, ino)
     )
         SERROR(err = EIO);
         
     // query
-    if (evsql_query_params(ctx->db, fop->base.trans, sql, &params, dbfs_write_res, fop) == NULL)
+    if (evsql_query_params(ctx->db, NULL, sql, &params, dbfs_write_res, req) == NULL)
         SERROR(err = EIO);
 
     // ok, wait for the info results
     return;
 
 error:
-    // fail it
-    dbfs_op_fail(&fop->base, err);
+    fuse_reply_err(req, err);
 }
 
 void dbfs_flush (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi) {
@@ -299,7 +289,7 @@ void dbfs_flush (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi
     INFO("[dbfs.flush %p:%p] ino=%lu", fop, req, ino);
     
     // and reply...
-    if ((err = fuse_reply_err(req, 0)))
+    if ((err = -fuse_reply_err(req, 0)))
         EWARNING(err, "fuse_reply_err");
 
     // done

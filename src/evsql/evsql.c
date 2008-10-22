@@ -864,7 +864,7 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
     // transform
     for (param = params->list, idx = 0; param->type; param++, idx++) {
         // `set for NULLs, otherwise not
-        query->params.types[idx] = param->data_raw ? 0 : 16;
+        query->params.types[idx] = param->data_raw ? 0 : EVSQL_PQ_ARBITRARY_TYPE_OID;
         
         // values
         query->params.values[idx] = param->data_raw;
