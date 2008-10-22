@@ -21,7 +21,7 @@ static struct fuse_lowlevel_ops dbfs_llops = {
     .rmdir          = dbfs_unlink,  // this behaves just the same
     .symlink        = dbfs_symlink,
     .rename         = dbfs_rename,
-
+    .link           = dbfs_link,
     .open           = dbfs_open,
     .read           = dbfs_read,
     .write          = dbfs_write,

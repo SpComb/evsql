@@ -12,6 +12,8 @@ struct dbfs_mk_ctx {
     char *link, *name;
     uint16_t mode;
     uint32_t ino, parent;
+
+    unsigned char is_dir : 1;
 };
 
 // default mode for symlinks
@@ -93,11 +95,12 @@ void dbfs_mk_inode (const struct evsql_result_info *res, void *arg) {
     // insert file_tree entry
     const char *sql = 
         "INSERT"
-        " INTO file_tree (name, parent, ino)"
-        " VALUES ($1::varchar, $2::int4, $3::int4)";
+        " INTO file_tree (name, parent, ino, ino_dir)"
+        " VALUES ($1::varchar, $2::int4, $3::int4, $4::int4)";
     
     static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
         EVSQL_PARAM ( STRING ),
+        EVSQL_PARAM ( UINT32 ),
         EVSQL_PARAM ( UINT32 ),
         EVSQL_PARAM ( UINT32 ),
 
@@ -108,6 +111,7 @@ void dbfs_mk_inode (const struct evsql_result_info *res, void *arg) {
         ||  evsql_param_string(&params, 0, ctx->name)
         ||  evsql_param_uint32(&params, 1, ctx->parent)
         ||  evsql_param_uint32(&params, 2, ctx->ino)
+        ||  ctx->is_dir ? evsql_param_uint32(&params, 3, ctx->ino) : evsql_param_null(&params, 3)
     )
         goto error;
     
@@ -168,7 +172,7 @@ error:
 /*
  * It is assumed that name and link_path must be copied, but type remains useable
  */ 
-void dbfs_mk (struct fuse_req *req, fuse_ino_t parent, const char *name, const char *type, uint16_t mode, const char *data_expr, const char *link) {
+void dbfs_mk (struct fuse_req *req, fuse_ino_t parent, const char *name, const char *type, uint16_t mode, const char *data_expr, const char *link, unsigned char is_dir) {
     struct dbfs_mk_ctx *ctx = NULL;
 
     // alloc
@@ -190,6 +194,7 @@ void dbfs_mk (struct fuse_req *req, fuse_ino_t parent, const char *name, const c
     ctx->type = type;
     ctx->data_expr = data_expr;
     ctx->mode = mode;
+    ctx->is_dir = is_dir;
 
     // copy volatile strings
     if (
@@ -199,7 +204,7 @@ void dbfs_mk (struct fuse_req *req, fuse_ino_t parent, const char *name, const c
         ERROR("strdup");
     
     // log
-    INFO("[dbfs.mk %p:%p] parent=%lu, name=%s, type=%s, mode=%#04o data_expr=%s link=%s", ctx, req, parent, name, type, mode, data_expr, link);
+    INFO("[dbfs.mk %p:%p] parent=%lu, name=%s, type=%s, mode=%#04o data_expr=%s link=%s is_dir=%hhd", ctx, req, parent, name, type, mode, data_expr, link, is_dir);
 
     // wait
     return;
@@ -218,7 +223,7 @@ void dbfs_mknod (struct fuse_req *req, fuse_ino_t parent, const char *name, mode
     if ((mode & S_IFMT) != S_IFREG)
         EERROR(err = EINVAL, "mode is not REG: %#08o", mode);
 
-    dbfs_mk(req, parent, name, "REG", mode & 07777, "lo_create(0)", NULL);
+    dbfs_mk(req, parent, name, "REG", mode & 07777, "lo_create(0)", NULL, 0);
 
     return;
 
@@ -228,11 +233,11 @@ error:
 }
 
 void dbfs_mkdir (struct fuse_req *req, fuse_ino_t parent, const char *name, mode_t mode) {
-    dbfs_mk(req, parent, name, "DIR", mode, NULL, NULL);
+    dbfs_mk(req, parent, name, "DIR", mode, NULL, NULL, 1);
 }
 
 
 void dbfs_symlink (struct fuse_req *req, const char *link, fuse_ino_t parent, const char *name) {
-    dbfs_mk(req, parent, name, "LNK", DBFS_SYMLINK_MODE, NULL, link);
+    dbfs_mk(req, parent, name, "LNK", DBFS_SYMLINK_MODE, NULL, link, 0);
 }
 

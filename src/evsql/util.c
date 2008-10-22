@@ -51,6 +51,14 @@ int evsql_params_clear (struct evsql_query_params *params) {
     return 0;
 }
 
+int evsql_param_null   (struct evsql_query_params *params, size_t param) {
+    struct evsql_query_param *p = &params->list[param];
+
+    p->data_raw = NULL;
+
+    return 0;
+}
+
 int evsql_param_binary (struct evsql_query_params *params, size_t param, const char *ptr, size_t len) {
     struct evsql_query_param *p = &params->list[param];
     

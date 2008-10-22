@@ -218,6 +218,7 @@ int evsql_param_binary (struct evsql_query_params *params, size_t param, const c
 int evsql_param_string (struct evsql_query_params *params, size_t param, const char *ptr);
 int evsql_param_uint16 (struct evsql_query_params *params, size_t param, uint16_t uval);
 int evsql_param_uint32 (struct evsql_query_params *params, size_t param, uint32_t uval);
+int evsql_param_null   (struct evsql_query_params *params, size_t param);
 int evsql_params_clear (struct evsql_query_params *params);
 
 /*

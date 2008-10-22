@@ -7,16 +7,15 @@
 void dbfs_init (void *userdata, struct fuse_conn_info *conn);
 void dbfs_destroy (void *arg);
 
-/* core.c */
-void dbfs_lookup (struct fuse_req *req, fuse_ino_t parent, const char *name);
-
 /* attr.c */
 void dbfs_getattr (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);
 void dbfs_setattr(struct fuse_req *req, fuse_ino_t ino, struct stat *attr, int to_set, struct fuse_file_info *fi);
 
 /* link.c */
+void dbfs_lookup (struct fuse_req *req, fuse_ino_t parent, const char *name);
 void dbfs_readlink (struct fuse_req *req, fuse_ino_t ino);
 void dbfs_unlink (struct fuse_req *req, fuse_ino_t parent, const char *name);
+void dbfs_link (struct fuse_req *req, fuse_ino_t ino, fuse_ino_t newparent, const char *newname);
 
 /* dirop.c */
 void dbfs_opendir (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi);

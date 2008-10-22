@@ -4,16 +4,22 @@ No weird dynamic magic.
 
 
 file_tree:
-    offset              serial4                 ephemeral counter used to tell one file entry from another
-    name                varchar(256)            the filename
-    parent              int4 -> inodes.ino      file entry's parent
-    inode               int4 -> inodes.ino      the file's data
+    offset              serial4                     ephemeral counter used to tell one file entry from another
+    ino                 int4 -> inodes.ino          the file inode
+    ino_dir             int4 -> inodes.ino          the file's inode if it's a dir, NULL otherwise
+    name                varchar(256)                the filename
+    parent              int4 -> file_tree.ino_dir   file entry's parent dir
+    
+    unique(ino_dir)
+    unique(name, parent)
 
 inodes:
     ino                 serial4                 inode number
     type                char(3)
             REG                         normal file
             DIR                         directory
+            LNK                         symlink
     mode                int2                    file access modes 
-    size                int8                    file content size (?)
+    data                oid                     type=REG -> file data, else NULL
+    link_path           varchar(512)            type=LNK -> symlink target, else NULL
 
