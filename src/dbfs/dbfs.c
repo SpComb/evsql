@@ -6,12 +6,10 @@
 #include "../lib/log.h"
 
 static struct fuse_lowlevel_ops dbfs_llops = {
-
     .init           = dbfs_init,
     .destroy        = dbfs_destroy,
-    
     .lookup         = dbfs_lookup,
-    // .forget
+    // .forget                      // not needed
     .getattr        = dbfs_getattr,
     .setattr        = dbfs_setattr,
     .readlink       = dbfs_readlink,
@@ -27,7 +25,7 @@ static struct fuse_lowlevel_ops dbfs_llops = {
     .write          = dbfs_write,
     .flush          = dbfs_flush,
     .release        = dbfs_release,
-
+    // .fsync                       // not needed
     .opendir        = dbfs_opendir,
     .readdir        = dbfs_readdir,
     .releasedir     = dbfs_releasedir,
