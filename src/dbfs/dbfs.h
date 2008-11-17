@@ -9,6 +9,7 @@
 #include "ops.h"
 #include "../evfuse.h"
 #include "../evsql.h"
+#include "../lib/error.h"
 
 /*
  * Structs and functions shared between all dbfs components
@@ -22,9 +23,6 @@ struct dbfs {
 
     struct evfuse *ev_fuse;
 };
-
-// used for error returns
-typedef int err_t;
 
 // XXX: not sure how this should work
 #define CACHE_TIMEOUT 1.0
@@ -66,5 +64,44 @@ err_t dbfs_check_result (const struct evsql_result_info *res, size_t rows, size_
  * Note that this does not fill the st_ino field
  */
 int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_t row, size_t col_offset);
+
+/** interrupt.c 
+ *  
+ * Fuse interrupts are handled using fuse_req_interrupt_func. Calling this registers a callback function with the req,
+ * which may or may not be called either by fuse_req_interrupt_func, or later on via evfuse's event handler. It is
+ * assumed that this will never be called after a call to fuse_reply_*.
+ *
+ * Hence, to handle an interrupt, we must first ensure that fuse_reply_* will not be called afterwards (it'll return
+ * an error), and then we must call fuse_reply_err(req, EINTR).
+ *
+ * In the simplest case, we can simply submit a query, and then abort it once the req is interrupted (now or later).
+ * In the more complicated case, we can check if the request was interrupted, if not, do the query and handle
+ * interrupts.
+ */
+
+/*
+ * Useable as a callback to fuse_req_interrupt_func, will abort the given query and err the req.
+ */
+void dbfs_interrupt_query (struct fuse_req *req, void *query_ptr);
+
+/*
+ * XXX: More complicated state, is this actually needed?
+ */
+struct dbfs_interrupt_ctx {
+    struct fuse_req *req;
+    struct evsql_query *query;
+
+    int interrupted : 1;
+};
+
+/*
+ * Register as a fuse interrupt function for simple requests that only run one query without allocating any resources.
+ *
+ * This will abort the query if the interrupt is run, causing it's callback to not be called.
+ *
+ * Returns nonzero if the request was already interrupted, zero otherwise. Be careful that the interrupt does not get
+ * fired between you checking for it and setting query.
+ */
+int dbfs_interrupt_register (struct fuse_req *req, struct dbfs_interrupt_ctx *ctx);
 
 #endif /* DBFS_DBFS_H */

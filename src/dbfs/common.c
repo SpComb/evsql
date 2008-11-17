@@ -50,7 +50,7 @@ error:
 }
 
 err_t dbfs_check_result (const struct evsql_result_info *res, size_t rows, size_t cols) {
-    int err;
+    err_t err;
 
     // number of rows returned/affected
     size_t nrows = evsql_result_rows(res) ? : evsql_result_affected(res);

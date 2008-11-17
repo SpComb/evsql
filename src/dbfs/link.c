@@ -52,6 +52,7 @@ error:
 
 void dbfs_lookup (struct fuse_req *req, fuse_ino_t parent, const char *name) {
     struct dbfs *ctx = fuse_req_userdata(req);
+    struct evsql_query *query;
     int err;
 
     INFO("[dbfs.lookup] parent=%lu name=%s", parent, name);
@@ -78,10 +79,11 @@ void dbfs_lookup (struct fuse_req *req, fuse_ino_t parent, const char *name) {
         EERROR(err = EIO, "evsql_param_*");
 
     // query
-    if (evsql_query_params(ctx->db, NULL, sql, &params, dbfs_entry_res, req) == NULL)
+    if ((query = evsql_query_params(ctx->db, NULL, sql, &params, dbfs_entry_res, req)) == NULL)
         EERROR(err = EIO, "evsql_query_params");
 
-    // XXX: handle interrupts
+    // handle interrupts
+    fuse_req_interrupt_func(req, dbfs_interrupt_query, query);
     
     // wait
     return;
@@ -130,6 +132,7 @@ error:
 
 void dbfs_readlink (struct fuse_req *req, fuse_ino_t ino) {
     struct dbfs *ctx = fuse_req_userdata(req);
+    struct evsql_query *query;
     int err;
     
     INFO("[dbfs.readlink %p] ino=%lu", req, ino);
@@ -153,10 +156,11 @@ void dbfs_readlink (struct fuse_req *req, fuse_ino_t ino) {
         SERROR(err = EIO);
         
     // query
-    if (evsql_query_params(ctx->db, NULL, sql, &params, _dbfs_readlink_res, req) == NULL)
+    if ((query = evsql_query_params(ctx->db, NULL, sql, &params, _dbfs_readlink_res, req)) == NULL)
         SERROR(err = EIO);
 
-    // XXX: handle interrupts
+    // handle interrupts
+    fuse_req_interrupt_func(req, dbfs_interrupt_query, query);
     
     // wait
     return;
@@ -194,6 +198,7 @@ error:
 
 void dbfs_unlink (struct fuse_req *req, fuse_ino_t parent, const char *name) {
     struct dbfs *ctx = fuse_req_userdata(req);
+    struct evsql_query *query;
     int err;
     
     INFO("[dbfs.unlink %p] parent=%lu, name=%s", req, parent, name);
@@ -211,17 +216,18 @@ void dbfs_unlink (struct fuse_req *req, fuse_ino_t parent, const char *name) {
     };
 
     // build params
-    if (SETERR(err, (0
+    if (0
         ||  evsql_param_uint32(&params, 0, parent)
         ||  evsql_param_string(&params, 1, name)
-    ), EIO))
-        goto error;
+    )
+        SERROR(err = EIO);
         
     // query
-    if (SETERR(err, evsql_query_params(ctx->db, NULL, sql, &params, dbfs_unlink_res, req) == NULL, EIO))
-        goto error;
+    if ((query = evsql_query_params(ctx->db, NULL, sql, &params, dbfs_unlink_res, req)) == NULL)
+        SERROR(err = EIO);
 
-    // XXX: handle interrupts
+    // handle interrupts
+    fuse_req_interrupt_func(req, dbfs_interrupt_query, query);
     
     // wait
     return;
@@ -233,6 +239,7 @@ error:
 
 void dbfs_link (struct fuse_req *req, fuse_ino_t ino, fuse_ino_t newparent, const char *newname) {
     struct dbfs *ctx = fuse_req_userdata(req);
+    struct evsql_query *query;
     int err;
     
     INFO("[dbfs.link %p] ino=%lu, newparent=%lu, newname=%s", req, ino, newparent, newname);
@@ -257,10 +264,11 @@ void dbfs_link (struct fuse_req *req, fuse_ino_t ino, fuse_ino_t newparent, cons
         SERROR(err = EIO);
         
     // query
-    if (evsql_query_params(ctx->db, NULL, sql, &params, dbfs_entry_res, req) == NULL)
+    if ((query = evsql_query_params(ctx->db, NULL, sql, &params, dbfs_entry_res, req)) == NULL)
         SERROR(err = EIO);
 
-    // XXX: handle interrupts
+    // handle interrupts
+    fuse_req_interrupt_func(req, dbfs_interrupt_query, query);
     
     // wait
     return;

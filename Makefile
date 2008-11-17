@@ -5,31 +5,34 @@ LIBRARY_PATHS = -L${LIBEVENT_PATH}/lib -L${LIBFUSE_PATH}/lib
 INCLUDE_PATHS = -I${LIBEVENT_PATH}/include -I${LIBFUSE_PATH}/include
 LDLIBS = -levent -lfuse -lpq
 
-# default is TEST
+# default is test
 ifndef MODE
-MODE = TEST
+MODE = test
 endif
 
-ifeq ($(MODE), DEBUG)
+ifeq ($(MODE), debug)
 MODE_CFLAGS = -g -DDEBUG_ENABLED
-else ifeq ($(MODE), DEV)
+else ifeq ($(MODE), dev)
 MODE_CFLAGS = -g
-else ifeq ($(MODE), TEST)
+else ifeq ($(MODE), test)
 MODE_CFLAGS = -g -DINFO_DISABLED
-else ifeq ($(MODE), RELEASE)
+else ifeq ($(MODE), release)
 MODE_CFLAGS = -DINFO_DISABLED -O2
 endif
 
 # XXX: ugh... use `pkg-config fuse`
 DEFINES = -D_FILE_OFFSET_BITS=64
-MY_CFLAGS = -Wall -std=gnu99 $(MODE_CFLAGS)
+FIXED_CFLAGS = -Wall -std=gnu99
 
 BIN_NAMES = helloworld hello simple_hello evpq_test url_test dbfs
 BIN_PATHS = $(addprefix bin/,$(BIN_NAMES))
 
+# modules
+module_objs = $(patsubst src/%.c,obj/%.o,$(wildcard src/$(1)/*.c))
+
 # complex modules
-EVSQL_OBJS = obj/evsql/evsql.o obj/evsql/util.o obj/evpq.o
-DBFS_OBJS = obj/dbfs/dbfs.o obj/dbfs/common.o obj/dbfs/op_base.o obj/dbfs/trans.o obj/dbfs/dirop.o obj/dirbuf.o obj/dbfs/fileop.o obj/dbfs/attr.o obj/dbfs/link.o obj/dbfs/tree.o obj/dbfs/mk.o
+EVSQL_OBJS = $(call module_objs,evsql) obj/evpq.o
+DBFS_OBJS = $(call module_objs,dbfs) obj/dirbuf.o 
 
 # first target
 all: ${BIN_PATHS}
@@ -43,9 +46,10 @@ bin/url_test: obj/lib/url.o obj/lib/lex.o obj/lib/log.o
 bin/dbfs: ${DBFS_OBJS} ${EVSQL_OBJS} obj/evfuse.o obj/lib/log.o obj/lib/signals.o
 
 # computed
-LDFLAGS = ${LIBRARY_PATHS} ${LIBRARY_LIST}
-CFLAGSX = ${DEFINES} ${MY_CFLAGS}
-CFLAGS = ${INCLUDE_PATHS} ${CFLAGSX}
+LDFLAGS = ${LIBRARY_PATHS}
+
+CPPFLAGS = ${INCLUDE_PATHS} ${DEFINES}
+CFLAGS = ${MODE_CFLAGS} ${FIXED_CFLAGS}
 
 SRC_PATHS = $(wildcard src/*.c) $(wildcard src/*/*.c)
 SRC_NAMES = $(patsubst src/%,%,$(SRC_PATHS))

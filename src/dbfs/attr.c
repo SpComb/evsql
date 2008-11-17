@@ -50,6 +50,7 @@ error:
 
 void dbfs_getattr (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *fi) {
     struct dbfs *ctx = fuse_req_userdata(req);
+    struct evsql_query *query;
     int err;
     
     (void) fi;
@@ -75,10 +76,11 @@ void dbfs_getattr (struct fuse_req *req, fuse_ino_t ino, struct fuse_file_info *
         SERROR(err = EIO);
         
     // query
-    if (evsql_query_params(ctx->db, NULL, sql, &params, _dbfs_attr_res, req) == NULL)
+    if ((query = evsql_query_params(ctx->db, NULL, sql, &params, _dbfs_attr_res, req)) == NULL)
         SERROR(err = EIO);
 
-    // XXX: handle interrupts
+    // handle interrupts
+    fuse_req_interrupt_func(req, dbfs_interrupt_query, query);
     
     // wait
     return;
@@ -91,6 +93,7 @@ error:
 
 void dbfs_setattr (struct fuse_req *req, fuse_ino_t ino, struct stat *attr, int to_set, struct fuse_file_info *fi) {
     struct dbfs *ctx = fuse_req_userdata(req);
+    struct evsql_query *query;
     int err;
     int ret;
     
@@ -160,10 +163,11 @@ void dbfs_setattr (struct fuse_req *req, fuse_ino_t ino, struct stat *attr, int 
     evsql_query_debug(sql_buf, &params);
     
     // query... we can pretend it's a getattr :)
-    if (evsql_query_params(ctx->db, NULL, sql_buf, &params, _dbfs_attr_res, req) == NULL)
+    if ((query = evsql_query_params(ctx->db, NULL, sql_buf, &params, _dbfs_attr_res, req)) == NULL)
         SERROR(err = EIO);
 
-    // XXX: handle interrupts
+    // handle interrupts
+    fuse_req_interrupt_func(req, dbfs_interrupt_query, query);
     
     // wait
     return;
