@@ -81,6 +81,8 @@ int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_
 
 /*
  * Useable as a callback to fuse_req_interrupt_func, will abort the given query and err the req.
+ *
+ * Due to a locking bug in libfuse 2.7.4, this will actually delay the fuse_req_err until the next event-loop iteration.
  */
 void dbfs_interrupt_query (struct fuse_req *req, void *query_ptr);
 
