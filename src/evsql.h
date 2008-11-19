@@ -10,6 +10,8 @@
 #include <postgresql/libpq-fe.h>
 #include <event2/event.h>
 
+#include <lib/err.h>
+
 /*
  * The generic context handle
  */
@@ -62,12 +64,33 @@ enum evsql_item_type {
     EVSQL_TYPE_UINT64,
 };
 
-struct evsql_item {
+struct evsql_item_binary {
+    const char *ptr;
+    size_t len;
+};
+
+/*
+ * Metadata about the type of an item
+ */
+struct evsql_item_info {
     // format
     enum evsql_item_format format;
     
     // type
     enum evsql_item_type type;
+
+    // flags
+    struct evsql_item_flags {
+        uint8_t null_ok : 1;
+    } flags;
+};
+
+/*
+ * The type and value of an item
+ */
+struct evsql_item {
+    // "header"
+    struct evsql_item_info info;
 
     // pointer to the raw databytes. Set to NULL to indicate SQL-NULL
     const char *bytes;
@@ -85,39 +108,39 @@ struct evsql_item {
 
 /*
  * Query info, similar to prepared statements
+ *
+ * Contains the literal SQL query and the types of the arguments
  */
 struct evsql_query_info {
     // the SQL query itself
     const char *sql;
 
     // the list of items
-    struct evsql_item params[];
+    struct evsql_item_info params[];
+};
+
+/*
+ * Contains the query parameter types and their values
+ */
+struct evsql_query_params {
+    // result format
+    enum evsql_item_format result_format;
+    
+    // list of params
+    struct evsql_item list[];
 };
 
 /*
  * Result info
+ *
+ * Contains the types of the result columns
  */
 struct evsql_result_info {
-    int padding;
+    // XXX: put something useful here?
+    int _unused;
 
     // the list of fields
-    struct evsql_item columns[];
-};
-
-
-/*
- * Result type
- */
-struct evsql_result_info {
-    struct evsql *evsql;
-    struct evsql_trans *trans;
-    
-    int error;
-
-    union evsql_result {
-        // libpq
-        PGresult *pq;
-    } result;
+    struct evsql_item_info columns[];
 };
 
 /*
@@ -127,7 +150,7 @@ struct evsql_result_info {
  *
  * Use the evsql_result_* functions to manipulate the results.
  */
-typedef void (*evsql_query_cb)(const struct evsql_result_info *res, void *arg);
+typedef void (*evsql_query_cb)(struct evsql_result *res, void *arg);
 
 /*
  * Callback for handling global-level errors.
@@ -187,7 +210,19 @@ struct evsql_query *evsql_query (struct evsql *evsql, struct evsql_trans *trans,
 /*
  * Same as evsql_query, but uses the SQL-level support for binding parameters.
  */
-struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans *trans, const char *command, const struct evsql_query_params *params, evsql_query_cb query_fn, void *cb_arg);
+struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans *trans, 
+    const char *command, const struct evsql_query_params *params, 
+    evsql_query_cb query_fn, void *cb_arg
+);
+
+/*
+ * Execute the given query_info, using the parameter list in query_info to resolve the given variable arugments
+ */
+struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *trans, 
+    const struct evsql_query_info *query_info,
+    evsql_query_cb query_fn, void *cb_arg,
+    ...
+);
 
 /*
  * Abort a query, the query callback will not be called, the query and any possible results will be discarded.
@@ -246,29 +281,38 @@ void evsql_query_debug (const char *sql, const struct evsql_query_params *params
  */
 
 // get error message associated with function
-const char *evsql_result_error (const struct evsql_result_info *res);
+const char *evsql_result_error (const struct evsql_result *res);
+
+/*
+ * Iterator-based interface.
+ *
+ * Call result_begin to check for errors, then result_next to fetch rows, and finally result_end to release.
+ */
+err_t evsql_result_begin (struct evsql_result_info *info, struct evsql_result *res);
+int evsql_result_next (struct evsql_result *res, ...);
+void evsql_result_end (struct evsql_result *res);
 
 // number of rows in the result
-size_t evsql_result_rows (const struct evsql_result_info *res);
+size_t evsql_result_rows (const struct evsql_result *res);
 
 // number of columns in the result
-size_t evsql_result_cols (const struct evsql_result_info *res);
+size_t evsql_result_cols (const struct evsql_result *res);
 
 // number of affected rows for UPDATE/INSERT
-size_t evsql_result_affected (const struct evsql_result_info *res);
+size_t evsql_result_affected (const struct evsql_result *res);
 
 // fetch the raw binary value from a result set, and return it via ptr
 // if size is nonzero, check that the size of the field data matches
-int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok);
-int evsql_result_string (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, int nullok);
+int evsql_result_binary (const struct evsql_result *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok);
+int evsql_result_string (const struct evsql_result *res, size_t row, size_t col, const char **ptr, int nullok);
 
 // fetch certain kinds of values from a binary result set
-int evsql_result_uint16 (const struct evsql_result_info *res, size_t row, size_t col, uint16_t *uval, int nullok);
-int evsql_result_uint32 (const struct evsql_result_info *res, size_t row, size_t col, uint32_t *uval, int nullok);
-int evsql_result_uint64 (const struct evsql_result_info *res, size_t row, size_t col, uint64_t *uval, int nullok);
+int evsql_result_uint16 (const struct evsql_result *res, size_t row, size_t col, uint16_t *uval, int nullok);
+int evsql_result_uint32 (const struct evsql_result *res, size_t row, size_t col, uint32_t *uval, int nullok);
+int evsql_result_uint64 (const struct evsql_result *res, size_t row, size_t col, uint64_t *uval, int nullok);
 
 // release the result set, freeing its memory
-void evsql_result_free (const struct evsql_result_info *res);
+void evsql_result_free (struct evsql_result *res);
 
 /*
  * Close a connection. Callbacks for waiting queries will not be run.

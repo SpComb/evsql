@@ -1,5 +1,5 @@
 LIBEVENT_PATH = ../libs/libevent-dev
-LIBFUSE_PATH = ../libs/libfuse-2.7.4
+LIBFUSE_PATH = ../opt
 
 LIBRARY_PATHS = -L${LIBEVENT_PATH}/lib -L${LIBFUSE_PATH}/lib
 INCLUDE_PATHS = -I${LIBEVENT_PATH}/include -I${LIBFUSE_PATH}/include

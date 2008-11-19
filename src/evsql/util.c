@@ -121,54 +121,7 @@ void evsql_query_debug (const char *sql, const struct evsql_query_params *params
     }
 }
 
-const char *evsql_result_error (const struct evsql_result_info *res) {
-    if (!res->error)
-        return "No error";
-
-    switch (res->evsql->type) {
-        case EVSQL_EVPQ:
-            if (!res->result.pq)
-                return "unknown error (no result)";
-            
-            return PQresultErrorMessage(res->result.pq);
-
-        default:
-            FATAL("res->evsql->type");
-    }
-
-}
-
-size_t evsql_result_rows (const struct evsql_result_info *res) {
-    switch (res->evsql->type) {
-        case EVSQL_EVPQ:
-            return PQntuples(res->result.pq);
-
-        default:
-            FATAL("res->evsql->type");
-    }
-}
-
-size_t evsql_result_cols (const struct evsql_result_info *res) {
-    switch (res->evsql->type) {
-        case EVSQL_EVPQ:
-            return PQnfields(res->result.pq);
-
-        default:
-            FATAL("res->evsql->type");
-    }
-}
-
-size_t evsql_result_affected (const struct evsql_result_info *res) {
-    switch (res->evsql->type) {
-        case EVSQL_EVPQ:
-            return strtol(PQcmdTuples(res->result.pq), NULL, 10);
-
-        default:
-            FATAL("res->evsql->type");
-    }
-}
-
-int evsql_result_binary (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok) {
+int evsql_result_binary (const struct evsql_result *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok) {
     *ptr = NULL;
 
     switch (res->evsql->type) {
@@ -196,7 +149,7 @@ error:
     return -1;
 }
 
-int evsql_result_binlen (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, size_t size, int nullok) {
+int evsql_result_binlen (const struct evsql_result *res, size_t row, size_t col, const char **ptr, size_t size, int nullok) {
     size_t real_size = 0;
 
     if (evsql_result_binary(res, row, col, ptr, &real_size, nullok))
@@ -216,7 +169,7 @@ error:
     return -1;
 }
 
-int evsql_result_string (const struct evsql_result_info *res, size_t row, size_t col, const char **ptr, int nullok) {
+int evsql_result_string (const struct evsql_result *res, size_t row, size_t col, const char **ptr, int nullok) {
     size_t real_size;
 
     if (evsql_result_binary(res, row, col, ptr, &real_size, nullok))
@@ -230,7 +183,7 @@ error:
     return -1;
 }
 
-int evsql_result_uint16 (const struct evsql_result_info *res, size_t row, size_t col, uint16_t *uval, int nullok) {
+int evsql_result_uint16 (const struct evsql_result *res, size_t row, size_t col, uint16_t *uval, int nullok) {
     const char *data;
     int16_t sval;
 
@@ -253,7 +206,7 @@ error:
     return nullok ? 0 : -1;
 }
 
-int evsql_result_uint32 (const struct evsql_result_info *res, size_t row, size_t col, uint32_t *uval, int nullok) {
+int evsql_result_uint32 (const struct evsql_result *res, size_t row, size_t col, uint32_t *uval, int nullok) {
     const char *data;
     int32_t sval;
 
@@ -276,7 +229,7 @@ error:
     return nullok ? 0 : -1;
 }
 
-int evsql_result_uint64 (const struct evsql_result_info *res, size_t row, size_t col, uint64_t *uval, int nullok) {
+int evsql_result_uint64 (const struct evsql_result *res, size_t row, size_t col, uint64_t *uval, int nullok) {
     const char *data;
     int64_t sval;
 
@@ -297,16 +250,6 @@ int evsql_result_uint64 (const struct evsql_result_info *res, size_t row, size_t
 
 error:
     return nullok ? 0 : -1;
-}
-
-void evsql_result_free (const struct evsql_result_info *res) {
-    switch (res->evsql->type) {
-        case EVSQL_EVPQ:
-            return PQclear(res->result.pq);
-
-        default:
-            FATAL("res->evsql->type");
-    }
 }
 
 const char *evsql_conn_error (struct evsql_conn *conn) {

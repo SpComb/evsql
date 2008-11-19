@@ -731,7 +731,7 @@ error:
 }
 
 /*
- * Validate and allocate the basic stuff for a new query.
+ * Internal query functions
  */
 static struct evsql_query *_evsql_query_new (struct evsql *evsql, struct evsql_trans *trans, evsql_query_cb query_fn, void *cb_arg) {
     struct evsql_query *query = NULL;
@@ -755,12 +755,6 @@ error:
     return NULL;
 }
 
-/*
- * Handle a new query.
- *
- * For transactions this will associate the query and then execute it, otherwise this will either find an idle
- * connection and send the query, or enqueue it.
- */
 static int _evsql_query_enqueue (struct evsql *evsql, struct evsql_trans *trans, struct evsql_query *query, const char *command) {
     // transaction queries are handled differently
     if (trans) {
@@ -818,106 +812,6 @@ error:
     return -1;
 }
 
-struct evsql_query *evsql_query (struct evsql *evsql, struct evsql_trans *trans, const char *command, evsql_query_cb query_fn, void *cb_arg) {
-    struct evsql_query *query = NULL;
-    
-    // alloc new query
-    if ((query = _evsql_query_new(evsql, trans, query_fn, cb_arg)) == NULL)
-        goto error;
-    
-    // just execute the command string directly
-    if (_evsql_query_enqueue(evsql, trans, query, command))
-        goto error;
-
-    // ok
-    return query;
-
-error:
-    _evsql_query_free(query);
-
-    return NULL;
-}
-
-struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans *trans, const char *command, const struct evsql_query_params *params, evsql_query_cb query_fn, void *cb_arg) {
-    struct evsql_query *query = NULL;
-    const struct evsql_query_param *param;
-    int idx;
-    
-    // alloc new query
-    if ((query = _evsql_query_new(evsql, trans, query_fn, cb_arg)) == NULL)
-        goto error;
-
-    // count the params
-    for (param = params->list; param->type; param++) 
-        query->params.count++;
-
-    // allocate the vertical storage for the parameters
-    if (0
-        
-        ||  !(query->params.types    = calloc(query->params.count, sizeof(Oid)))
-        ||  !(query->params.values   = calloc(query->params.count, sizeof(char *)))
-        ||  !(query->params.lengths  = calloc(query->params.count, sizeof(int)))
-        ||  !(query->params.formats  = calloc(query->params.count, sizeof(int)))
-    )
-        ERROR("calloc");
-
-    // transform
-    for (param = params->list, idx = 0; param->type; param++, idx++) {
-        // `set for NULLs, otherwise not
-        query->params.types[idx] = param->data_raw ? 0 : EVSQL_PQ_ARBITRARY_TYPE_OID;
-        
-        // values
-        query->params.values[idx] = param->data_raw;
-
-        // lengths
-        query->params.lengths[idx] = param->length;
-
-        // formats, binary if length is nonzero, but text for NULLs
-        query->params.formats[idx] = param->length && param->data_raw ? 1 : 0;
-    }
-
-    // result format
-    switch (params->result_fmt) {
-        case EVSQL_FMT_TEXT:
-            query->params.result_format = 0; break;
-
-        case EVSQL_FMT_BINARY:
-            query->params.result_format = 1; break;
-
-        default:
-            FATAL("params.result_fmt: %d", params->result_fmt);
-    }
-
-    // execute it
-    if (_evsql_query_enqueue(evsql, trans, query, command))
-        goto error;
-
-#ifdef DEBUG_ENABLED
-    // debug it?
-    DEBUG("evsql.%p: enqueued query=%p on trans=%p", evsql, query, trans);
-    evsql_query_debug(command, params);
-#endif /* DEBUG_ENABLED */
-
-    // ok
-    return query;
-
-error:
-    _evsql_query_free(query);
-    
-    return NULL;
-}
-
-void evsql_query_abort (struct evsql_trans *trans, struct evsql_query *query) {
-    assert(query);
-
-    if (trans) {
-        // must be the right query
-        assert(trans->query == query);
-    }
-
-    // just strip the callback and wait for it to complete as normal
-    query->cb_fn = NULL;
-}
 
 void _evsql_trans_commit_res (const struct evsql_result_info *res, void *arg) {
     (void) arg;

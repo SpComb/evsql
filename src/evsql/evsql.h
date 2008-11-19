@@ -106,7 +106,7 @@ struct evsql_query {
     char *command;
     
     // possible query params
-    struct evsql_query_param_info {
+    struct evsql_query_params_pq {
         int count;
 
         Oid *types;
@@ -123,12 +123,21 @@ struct evsql_query {
 
     // our position in the query list
     TAILQ_ENTRY(evsql_query) entry;
-
-    // the result
-    union {
-        PGresult *evpq;
-    } result;
 };
+
+// the result
+struct evsql_result {
+    int error;
+
+    union {
+        PGresult *pq;
+    } result;
+
+    // result_* state
+    struct evsql_result_info *info;
+    size_t row_offset;
+};
+
 
 // maximum length for a 'BEGIN TRANSACTION ...' query
 #define EVSQL_QUERY_BEGIN_BUF 512
@@ -136,5 +145,31 @@ struct evsql_query {
 // the should the OID of some valid psql type... *ANY* valid psql type, doesn't matter, only used for NULLs
 // 16 = bool in 8.3
 #define EVSQL_PQ_ARBITRARY_TYPE_OID 16
+
+/*
+ * Core query-submission interface.
+ *
+ * This performs some error-checking on the trans, allocates the evsql_query and does some basic initialization.
+ *
+ * This does not actually enqueue the query anywhere, no reference is stored anywhere.
+ *
+ * Returns the new evsql_query on success, NULL on failure.
+ */
+static struct evsql_query *_evsql_query_new (struct evsql *evsql, struct evsql_trans *trans, evsql_query_cb query_fn, void *cb_arg);
+
+/*
+ * Begin processing the given query, which should now be fully filled out.
+ *
+ * If trans is given, it MUST be idle, and the query will be executed. Otherwise, it will either be executed directly
+ * or enqueued for future execution.
+ *
+ * Returns zero on success, nonzero on failure.
+ */
+static int _evsql_query_enqueue (struct evsql *evsql, struct evsql_trans *trans, struct evsql_query *query, const char *command);
+
+/*
+ * Validate and allocate the basic stuff for a new query.
+ */
+
 
 #endif /* EVSQL_INTERNAL_H */
