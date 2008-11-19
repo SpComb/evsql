@@ -5,7 +5,7 @@
  * An event-based (Postgre)SQL client API using libevent
  */
 
-// XXX: libpq
+// XXX: remove libpq?
 #include <stdint.h>
 #include <postgresql/libpq-fe.h>
 #include <event2/event.h>
@@ -16,14 +16,20 @@
 struct evsql;
 
 /*
+ * Transaction handle
+ */
+struct evsql_trans;
+
+/*
  * A query handle
  */
 struct evsql_query;
 
 /*
- * Transaction handle
+ * A result handle
  */
-struct evsql_trans;
+struct evsql_result;
+
 
 /*
  * Transaction type
@@ -37,60 +43,67 @@ enum evsql_trans_type {
 };
 
 /*
- * Parameter type
+ * Parameters and Result fields are both items
  */
-enum evsql_param_format {
+enum evsql_item_format {
     EVSQL_FMT_TEXT,
     EVSQL_FMT_BINARY,
 };
 
-enum evsql_param_type {
-    EVSQL_PARAM_INVALID,
+enum evsql_item_type {
+    EVSQL_TYPE_INVALID,
 
-    EVSQL_PARAM_NULL_,
+    EVSQL_TYPE_NULL_,
     
-    EVSQL_PARAM_BINARY,
-    EVSQL_PARAM_STRING,
-    EVSQL_PARAM_UINT16,
-    EVSQL_PARAM_UINT32,
-    EVSQL_PARAM_UINT64,
+    EVSQL_TYPE_BINARY,
+    EVSQL_TYPE_STRING,
+    EVSQL_TYPE_UINT16,
+    EVSQL_TYPE_UINT32,
+    EVSQL_TYPE_UINT64,
+};
+
+struct evsql_item {
+    // format
+    enum evsql_item_format format;
+    
+    // type
+    enum evsql_item_type type;
+
+    // pointer to the raw databytes. Set to NULL to indicate SQL-NULL
+    const char *bytes;
+
+    // size of byte array pointed to by bytes, zero for text
+    size_t length;
+
+    // the decoded value
+    union {
+        uint16_t uint16;
+        uint32_t uint32;
+        uint64_t uint64;
+    } value;
 };
 
 /*
- * Query parameter info.
- *
- * Use the EVSQL_PARAM_* macros to define the value of list
+ * Query info, similar to prepared statements
  */
-struct evsql_query_params {
-    // nonzero to get results in binary format
-    enum evsql_param_format result_fmt;
-    
-    // the list of parameters, terminated by { 0, 0 }
-    struct evsql_query_param {
-        // the param type
-        enum evsql_param_type type;
-        
-        // pointer to the raw data
-        const char *data_raw;
-        
-        // the value
-        union {
-            uint16_t uint16;
-            uint32_t uint32;
-            uint64_t uint64;
-        } data;
+struct evsql_query_info {
+    // the SQL query itself
+    const char *sql;
 
-        // the explicit length of the parameter if it's binary, zero for text.
-        // set to -1 to indicate that the value is still missing
-        ssize_t length;
-    } list[];
+    // the list of items
+    struct evsql_item params[];
 };
 
-// macros for defining evsql_query_params
-#define EVSQL_PARAMS(result_fmt)            { result_fmt, 
-#define EVSQL_PARAM(typenam)                    { EVSQL_PARAM_ ## typenam, NULL }
-#define EVSQL_PARAMS_END                        { EVSQL_PARAM_INVALID, NULL } \
-                                              } // <<<
+/*
+ * Result info
+ */
+struct evsql_result_info {
+    int padding;
+
+    // the list of fields
+    struct evsql_item columns[];
+};
+
 
 /*
  * Result type
@@ -256,15 +269,6 @@ int evsql_result_uint64 (const struct evsql_result_info *res, size_t row, size_t
 
 // release the result set, freeing its memory
 void evsql_result_free (const struct evsql_result_info *res);
-
-// platform-dependant aliases
-#define evsql_result_ushort evsql_result_uint16
-
-#if _LP64
-#define evsql_result_ulong evsql_result_uint64
-#else
-#define evsql_result_ulong evsql_result_uint32
-#endif /* _LP64 */
 
 /*
  * Close a connection. Callbacks for waiting queries will not be run.
