@@ -3,7 +3,7 @@
 
 #include "dbfs.h"
 
-void dbfs_rename_res (const struct evsql_result_info *res, void *arg) {
+void dbfs_rename_res (struct evsql_result *res, void *arg) {
     struct fuse_req *req = arg;
     int err;
 

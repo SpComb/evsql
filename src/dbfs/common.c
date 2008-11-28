@@ -20,11 +20,11 @@ mode_t _dbfs_mode (const char *type) {
     }
 }
 
-int _dbfs_check_res (const struct evsql_result_info *res, size_t rows, size_t cols) {
+int _dbfs_check_res (struct evsql_result *res, size_t rows, size_t cols) {
     int err = 0;
 
     // check if it failed
-    if (res->error)
+    if (evsql_result_check(res))
         NERROR(evsql_result_error(res));
         
     // not found?
@@ -49,14 +49,14 @@ error:
     return err;
 }
 
-err_t dbfs_check_result (const struct evsql_result_info *res, size_t rows, size_t cols) {
+err_t dbfs_check_result (struct evsql_result *res, size_t rows, size_t cols) {
     err_t err;
 
     // number of rows returned/affected
     size_t nrows = evsql_result_rows(res) ? : evsql_result_affected(res);
 
     // did the query fail outright?
-    if (res->error)
+    if (evsql_result_check(res))
         // dump error message
         NXERROR(err = EIO, evsql_result_error(res));
     
@@ -79,7 +79,7 @@ error:
     return err;
 }
 
-int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_t row, size_t col_offset) {
+int _dbfs_stat_info (struct stat *st, struct evsql_result *res, size_t row, size_t col_offset) {
     int err = 0;
     
     uint16_t mode;

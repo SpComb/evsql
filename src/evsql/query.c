@@ -84,8 +84,8 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
 
     // transform
     for (param = params->list, idx = 0; param->info.type; param++, idx++) {
-        // `set for NULLs, otherwise not
-        query->params.types[idx] = param->bytes ? 0 : EVSQL_PQ_ARBITRARY_TYPE_OID;
+        // set for NULLs, otherwise not
+        query->params.types[idx] = (param->bytes || param->flags.has_value) ? 0 : EVSQL_PQ_ARBITRARY_TYPE_OID;
 
         // scalar values
         query->params.item_vals[idx] = param->value;
@@ -96,9 +96,9 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
 
         // lengths
         query->params.lengths[idx] = param->length;
-
-        // formats, binary if length is nonzero, but text for NULLs
-        query->params.formats[idx] = param->length && param->bytes ? 1 : 0;
+        
+        // XXX: this assumes that format is FMT_BINARY...
+        query->params.formats[idx] = param->info.format;
     }
 
     // execute it

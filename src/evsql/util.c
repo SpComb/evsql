@@ -75,6 +75,9 @@ int evsql_param_string (struct evsql_query_params *params, size_t param, const c
     struct evsql_item *p = &params->list[param];
     
     assert(p->info.type == EVSQL_TYPE_STRING);
+    
+    // XXX: hmm...
+    p->info.format = EVSQL_FMT_TEXT;
 
     p->bytes = ptr;
     p->length = 0;

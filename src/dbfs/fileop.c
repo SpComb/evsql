@@ -27,7 +27,7 @@ static void _dbfs_fileop_free (struct dbfs_op *op_base) {
     (void) fop;
 }
 
-static void dbfs_open_res (const struct evsql_result_info *res, void *arg) {
+static void dbfs_open_res (struct evsql_result *res, void *arg) {
     struct dbfs_fileop *fop = arg;
     int err;
 
@@ -133,7 +133,7 @@ error:
     }
 }
 
-void dbfs_read_res (const struct evsql_result_info *res, void *arg) {
+void dbfs_read_res (struct evsql_result *res, void *arg) {
     struct fuse_req *req = arg;
     int err;
     const char *buf;
@@ -206,7 +206,7 @@ error:
     fuse_reply_err(req, err);
 }
 
-void dbfs_write_res (const struct evsql_result_info *res, void *arg) {
+void dbfs_write_res (struct evsql_result *res, void *arg) {
     struct fuse_req *req = arg;
     int err;
     uint32_t size;

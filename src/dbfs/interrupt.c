@@ -55,4 +55,7 @@ int dbfs_interrupt_register (struct fuse_req *req, struct dbfs_interrupt_ctx *ct
 
     // just pass over to fuse_req_interrupt_func
     fuse_req_interrupt_func(req, _dbfs_interrupt_ctx, ctx);
+    
+    // XXX: not implemented fully
+    return -1;
 }

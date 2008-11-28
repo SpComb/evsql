@@ -10,7 +10,7 @@
 /*
  * Used for lookup and link
  */
-void dbfs_entry_res (const struct evsql_result_info *res, void *arg) {
+void dbfs_entry_res (struct evsql_result *res, void *arg) {
     struct fuse_req *req = arg;
     struct fuse_entry_param e; ZINIT(e);
     int err = 0;
@@ -93,7 +93,7 @@ error:
         EWARNING(err, "fuse_reply_err");
 }
 
-void _dbfs_readlink_res (const struct evsql_result_info *res, void *arg) {
+void _dbfs_readlink_res (struct evsql_result *res, void *arg) {
     struct fuse_req *req = arg;
     int err = 0;
     
@@ -173,7 +173,7 @@ error:
 
 #define SETERR(err_var, err_val, bool_val) ((err_var) = bool_val ? (err_val) : 0)
 
-void dbfs_unlink_res (const struct evsql_result_info *res, void *arg) {
+void dbfs_unlink_res (struct evsql_result *res, void *arg) {
     struct fuse_req *req = arg;
     int err = 0;
     

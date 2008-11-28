@@ -33,7 +33,7 @@ static void _dbfs_dirop_free (struct dbfs_op *op_base) {
 /*
  * Handle the results for the initial attribute lookup for the dir itself during opendir ops.
  */
-static void dbfs_opendir_res (const struct evsql_result_info *res, void *arg) {
+static void dbfs_opendir_res (struct evsql_result *res, void *arg) {
     struct dbfs_dirop *dirop = arg;
     int err;
     
@@ -160,7 +160,7 @@ error:
  * Fill up the dirbuf, and then send the reply.
  *
  */
-static void dbfs_readdir_res (const struct evsql_result_info *res, void *arg) {
+static void dbfs_readdir_res (struct evsql_result *res, void *arg) {
     struct dbfs_dirop *dirop = arg;
     int err;
     size_t row;

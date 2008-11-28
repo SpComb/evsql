@@ -9,7 +9,7 @@
 // for building the setattr UPDATE
 #define FIELD(to_set, flag, field, value) ((to_set) & (flag)) ? (field " = " value ", ") : ""
 
-void _dbfs_attr_res (const struct evsql_result_info *res, void *arg) {
+void _dbfs_attr_res (struct evsql_result *res, void *arg) {
     struct fuse_req *req = arg;
     struct stat st; ZINIT(st);
     int err = 0;

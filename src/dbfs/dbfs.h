@@ -48,12 +48,12 @@ mode_t _dbfs_mode (const char *type);
  *  0   the results match
  *  1   there were no results (zero rows)
  */
-int _dbfs_check_res (const struct evsql_result_info *res, size_t rows, size_t cols);
+int _dbfs_check_res (struct evsql_result *res, size_t rows, size_t cols);
 
 /*
  * Same as _dbfs_check_res, but returns ENOENT/EIO directly
  */
-err_t dbfs_check_result (const struct evsql_result_info *res, size_t rows, size_t cols);
+err_t dbfs_check_result (struct evsql_result *res, size_t rows, size_t cols);
 
 /*
  * Fill a `struct state` with info retrieved from a SQL query.
@@ -63,7 +63,7 @@ err_t dbfs_check_result (const struct evsql_result_info *res, size_t rows, size_
  *
  * Note that this does not fill the st_ino field
  */
-int _dbfs_stat_info (struct stat *st, const struct evsql_result_info *res, size_t row, size_t col_offset);
+int _dbfs_stat_info (struct stat *st, struct evsql_result *res, size_t row, size_t col_offset);
 
 /** interrupt.c 
  *  

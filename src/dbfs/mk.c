@@ -58,7 +58,7 @@ error:
     dbfs_trans_fail(ctx_base, err);
 }
 
-void dbfs_mk_filetree (const struct evsql_result_info *res, void *arg) {
+void dbfs_mk_filetree (struct evsql_result *res, void *arg) {
     struct dbfs_mk_ctx *ctx = arg;
     int err = EIO;
     
@@ -79,7 +79,7 @@ error:
     evsql_result_free(res);
 }
 
-void dbfs_mk_inode (const struct evsql_result_info *res, void *arg) {
+void dbfs_mk_inode (struct evsql_result *res, void *arg) {
     struct dbfs_mk_ctx *ctx = arg;
     struct dbfs *dbfs_ctx = fuse_req_userdata(ctx->base.req);
     int err = EIO;
