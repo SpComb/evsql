@@ -1,5 +1,10 @@
 
 #include "evsql.h"
+#include "../lib/error.h"
+#include "../lib/misc.h"
+
+#include <stdlib.h>
+#include <assert.h>
 
 const char *evsql_result_error (const struct evsql_result *res) {
     if (!res->error)
@@ -41,6 +46,7 @@ size_t evsql_result_cols (const struct evsql_result *res) {
 size_t evsql_result_affected (const struct evsql_result *res) {
     switch (res->evsql->type) {
         case EVSQL_EVPQ:
+            // XXX: errors?
             return strtol(PQcmdTuples(res->result.pq), NULL, 10);
 
         default:
@@ -57,12 +63,9 @@ int evsql_result_null (const struct evsql_result *res, size_t row, size_t col) {
         default:
             FATAL("res->evsql->type");
     }
-
-error:
-    return -1;
 }
 
-int evsql_result_field (const struct evsql_result *res, size_t row, size_t col, const char **ptr, size_t *size) {
+int evsql_result_field (const struct evsql_result *res, size_t row, size_t col, char ** const ptr, size_t *size) {
     *ptr = NULL;
 
     switch (res->evsql->type) {
@@ -81,6 +84,11 @@ int evsql_result_field (const struct evsql_result *res, size_t row, size_t col, 
 
 error:
     return -1;
+}
+
+err_t evsql_result_check (struct evsql_result *res) {
+    // so simple...
+    return res->error ? EIO : 0;
 }
 
 err_t evsql_result_begin (struct evsql_result_info *info, struct evsql_result *res) {
@@ -126,16 +134,19 @@ int evsql_result_next (struct evsql_result *res, ...) {
     va_list vargs;
     struct evsql_item_info *col;
     size_t col_idx, row_idx = res->row_offset;
-    int err;
+    err_t err;
+    
+    // ensure that evsql_result_begin has been called
+    assert(res->info);
     
     // check if we're past the end
     if (row_idx >= evsql_result_rows(res))
         return 0;
     
     // varargs
-    va_start(vargs);
+    va_start(vargs, res);
 
-    for (col = info->columns, col_idx = 0; col->type; col++, col_idx++) {
+    for (col = res->info->columns, col_idx = 0; col->type; col++, col_idx++) {
         char *value = NULL;
         size_t length = 0;
         
@@ -144,8 +155,8 @@ int evsql_result_next (struct evsql_result *res, ...) {
             if (!col->flags.null_ok)
                 XERROR(err = EINVAL, "r%zu:c%zu: NULL", row_idx, col_idx);
 
-        } else if (evsql_result_field(row_idx, col_idx, &value, &length)) {
-            EERROR(err = EINVAL);
+        } else if (evsql_result_field(res, row_idx, col_idx, &value, &length)) {
+            SERROR(err = EINVAL);
 
         }
         
@@ -163,30 +174,64 @@ int evsql_result_next (struct evsql_result *res, ...) {
             case EVSQL_TYPE_STRING: {
                 char **str_ptr = va_arg(vargs, char **);
 
-                if (value) 
+                if (value) {
                     *str_ptr = value;
+                }
 
             } break;
 
             case EVSQL_TYPE_UINT16: {
-                uint16_t *uval_ptr = va_arg(vars, uint16_t *);
+                uint16_t *uval_ptr = va_arg(vargs, uint16_t *);
 
-                if (value) {
-                    if (length != sizeof(uint16_t))
-                        XERROR(err = EINVAL, "r%zu:c%zu: wrong size for uint16_t: %zu", row_idx, col_idx, length);
+                if (!value) break;
 
-                    int16_t sval = ntohs(*((int16_t *) value));
+                if (length != sizeof(uint16_t)) XERROR(err = EINVAL, "r%zu:c%zu: wrong size for uint16_t: %zu", row_idx, col_idx, length);
 
-                    if (sval < 0)
-                        XERROR(err = ERANGE, "r%zu:c%zu: out of range for uint16_t: %d", row_idx, col_idx, sval);
+                int16_t sval = ntohs(*((int16_t *) value));
 
-                    *uval_ptr = sval;
-                }
+                if (sval < 0) XERROR(err = ERANGE, "r%zu:c%zu: out of range for uint16_t: %hd", row_idx, col_idx, (signed short) sval);
+
+                *uval_ptr = sval;
             } break;
+            
+            case EVSQL_TYPE_UINT32: {
+                uint32_t *uval_ptr = va_arg(vargs, uint32_t *);
+
+                if (!value) break;
+
+                if (length != sizeof(uint32_t)) XERROR(err = EINVAL, "r%zu:c%zu: wrong size for uint32_t: %zu", row_idx, col_idx, length);
+
+                int32_t sval = ntohl(*((int32_t *) value));
+
+                if (sval < 0) XERROR(err = ERANGE, "r%zu:c%zu: out of range for uint32_t: %ld", row_idx, col_idx, (signed long) sval);
+
+                *uval_ptr = sval;
+            } break;
+            
+            case EVSQL_TYPE_UINT64: {
+                uint64_t *uval_ptr = va_arg(vargs, uint64_t *);
+
+                if (!value) break;
+
+                if (length != sizeof(uint64_t)) XERROR(err = EINVAL, "r%zu:c%zu: wrong size for uint64_t: %zu", row_idx, col_idx, length);
+
+                int64_t sval = ntohq(*((int64_t *) value));
+
+                if (sval < 0) XERROR(err = ERANGE, "r%zu:c%zu: out of range for uint64_t: %lld", row_idx, col_idx, (signed long long) sval);
+
+                *uval_ptr = sval;
+            } break;
+            
+            default:
+                XERROR(err = EINVAL, "r%zu:c%zu: invalid type: %d", row_idx, col_idx, col->type);
         }
     }
 
+    // row handled succesfully
+    return 1;
 
+error:
+    return -err;
 }
 
 void evsql_result_end (struct evsql_result *res) {
@@ -195,9 +240,12 @@ void evsql_result_end (struct evsql_result *res) {
 }
 
 void evsql_result_free (struct evsql_result *res) {
+    // note that the result itself might be NULL...
+    // in the case of internal-error results, these may be free'd multiple times!
     switch (res->evsql->type) {
         case EVSQL_EVPQ:
-            return PQclear(res->result.pq);
+            if (res->result.pq)
+                return PQclear(res->result.pq);
 
         default:
             FATAL("res->evsql->type");

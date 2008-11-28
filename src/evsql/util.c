@@ -5,13 +5,13 @@
 #include "../lib/log.h"
 #include "../lib/misc.h"
 
-#define _PARAM_TYPE_CASE(typenam) case EVSQL_PARAM_ ## typenam: return #typenam
+#define _PARAM_TYPE_CASE(typenam) case EVSQL_TYPE_ ## typenam: return #typenam
 
 #define _PARAM_VAL_BUF_MAX 120
-#define _PARAM_VAL_CASE(typenam, ...) case EVSQL_PARAM_ ## typenam: if (param->data_raw) ret = snprintf(buf, _PARAM_VAL_BUF_MAX, __VA_ARGS__); else return "(null)"; break
+#define _PARAM_VAL_CASE(typenam, ...) case EVSQL_TYPE_ ## typenam: if (item->bytes) ret = snprintf(buf, _PARAM_VAL_BUF_MAX, __VA_ARGS__); else return "(null)"; break
 
-const char *evsql_param_type (const struct evsql_query_param *param) {
-    switch (param->type) {
+const char *evsql_item_type (const struct evsql_item_info *item_info) {
+    switch (item_info->type) {
         _PARAM_TYPE_CASE (INVALID   );
         _PARAM_TYPE_CASE (NULL_     );
         _PARAM_TYPE_CASE (BINARY    );
@@ -24,18 +24,18 @@ const char *evsql_param_type (const struct evsql_query_param *param) {
 }
 
 
-static const char *evsql_param_val (const struct evsql_query_param *param) {
+static const char *evsql_item_val (const struct evsql_item *item) {
     static char buf[_PARAM_VAL_BUF_MAX];
     int ret;
 
-    switch (param->type) {
+    switch (item->info.type) {
         _PARAM_VAL_CASE (INVALID,   "???"                               );
         _PARAM_VAL_CASE (NULL_,     "(null)"                            );
-        _PARAM_VAL_CASE (BINARY,    "%zu:%s",   param->length, "..."    );
-        _PARAM_VAL_CASE (STRING,    "%s",       param->data_raw         );
-        _PARAM_VAL_CASE (UINT16,    "%hu",      (unsigned short int)     ntohs(param->data.uint16)  );
-        _PARAM_VAL_CASE (UINT32,    "%lu",      (unsigned long int)      ntohl(param->data.uint32)  );
-        _PARAM_VAL_CASE (UINT64,    "%llu",     (unsigned long long int) ntohq(param->data.uint64)  );
+        _PARAM_VAL_CASE (BINARY,    "%zu:%s",   item->length, "... "    );
+        _PARAM_VAL_CASE (STRING,    "%s",       item->bytes             );
+        _PARAM_VAL_CASE (UINT16,    "%hu",      (unsigned short int)     ntohs(item->value.uint16)  );
+        _PARAM_VAL_CASE (UINT32,    "%lu",      (unsigned long int)      ntohl(item->value.uint32)  );
+        _PARAM_VAL_CASE (UINT64,    "%llu",     (unsigned long long int) ntohq(item->value.uint64)  );
         default: return "???";
     }
 
@@ -43,81 +43,82 @@ static const char *evsql_param_val (const struct evsql_query_param *param) {
 }
 
 int evsql_params_clear (struct evsql_query_params *params) {
-    struct evsql_query_param *param;
+    struct evsql_item *param;
 
-    for (param = params->list; param->type; param++) 
-        param->data_raw = NULL;
+    for (param = params->list; param->info.type; param++) 
+        param->bytes = NULL;
 
     return 0;
 }
 
-int evsql_param_null   (struct evsql_query_params *params, size_t param) {
-    struct evsql_query_param *p = &params->list[param];
+int evsql_param_null (struct evsql_query_params *params, size_t param) {
+    struct evsql_item *p = &params->list[param];
 
-    p->data_raw = NULL;
+    p->bytes = NULL;
+    p->flags.has_value = 0;
 
     return 0;
 }
 
 int evsql_param_binary (struct evsql_query_params *params, size_t param, const char *ptr, size_t len) {
-    struct evsql_query_param *p = &params->list[param];
+    struct evsql_item *p = &params->list[param];
     
-    assert(p->type == EVSQL_PARAM_BINARY);
+    assert(p->info.type == EVSQL_TYPE_BINARY);
 
-    p->data_raw = ptr;
+    p->bytes = ptr;
     p->length = len;
 
     return 0;
 }
 
 int evsql_param_string (struct evsql_query_params *params, size_t param, const char *ptr) {
-    struct evsql_query_param *p = &params->list[param];
+    struct evsql_item *p = &params->list[param];
     
-    assert(p->type == EVSQL_PARAM_STRING);
+    assert(p->info.type == EVSQL_TYPE_STRING);
 
-    p->data_raw = ptr;
+    p->bytes = ptr;
     p->length = 0;
 
     return 0;
 }
 
 int evsql_param_uint16 (struct evsql_query_params *params, size_t param, uint16_t uval) {
-    struct evsql_query_param *p = &params->list[param];
+    struct evsql_item *p = &params->list[param];
     
-    assert(p->type == EVSQL_PARAM_UINT16);
+    assert(p->info.type == EVSQL_TYPE_UINT16);
 
-    p->data.uint16 = htons(uval);
-    p->data_raw = (const char *) &p->data.uint16;
+    p->value.uint16 = htons(uval);
     p->length = sizeof(uval);
+    p->flags.has_value = 1;
 
     return 0;
 }
 
 int evsql_param_uint32 (struct evsql_query_params *params, size_t param, uint32_t uval) {
-    struct evsql_query_param *p = &params->list[param];
+    struct evsql_item *p = &params->list[param];
     
-    assert(p->type == EVSQL_PARAM_UINT32);
+    assert(p->info.type == EVSQL_TYPE_UINT32);
 
-    p->data.uint32 = htonl(uval);
-    p->data_raw = (const char *) &p->data.uint32;
+    p->value.uint32 = htonl(uval);
     p->length = sizeof(uval);
+    p->flags.has_value = 1;
 
     return 0;
 }
 
 void evsql_query_debug (const char *sql, const struct evsql_query_params *params) {
-    const struct evsql_query_param *param;
+    const struct evsql_item *param;
     size_t param_count = 0, idx = 0;
 
     // count the params
-    for (param = params->list; param->type; param++) 
+    for (param = params->list; param->info.type; param++) 
         param_count++;
     
     DEBUG("sql:     %s", sql);
     DEBUG("params:  %zu", param_count);
 
-    for (param = params->list; param->type; param++) {
-        DEBUG("\t%2zu : %8s = %s", ++idx, evsql_param_type(param), evsql_param_val(param));
+    for (param = params->list; param->info.type; param++) {
+        DEBUG("\t%2zu : %8s = %s", ++idx, evsql_item_type(&param->info), evsql_item_val(param));
     }
 }
 

@@ -5,12 +5,10 @@
  * An event-based (Postgre)SQL client API using libevent
  */
 
-// XXX: remove libpq?
 #include <stdint.h>
-#include <postgresql/libpq-fe.h>
 #include <event2/event.h>
 
-#include <lib/err.h>
+#include "lib/err.h"
 
 /*
  * The generic context handle
@@ -86,24 +84,34 @@ struct evsql_item_info {
 };
 
 /*
+ * Storage for various scalar values
+ */
+union evsql_item_value {
+    uint16_t uint16;
+    uint32_t uint32;
+    uint64_t uint64;
+};
+
+/*
  * The type and value of an item
  */
 struct evsql_item {
     // "header"
     struct evsql_item_info info;
 
-    // pointer to the raw databytes. Set to NULL to indicate SQL-NULL
+    // pointer to the raw databytes. Set to NULL to indicate SQL-NULL, &value, or an external buf
     const char *bytes;
 
     // size of byte array pointed to by bytes, zero for text
     size_t length;
 
     // the decoded value
-    union {
-        uint16_t uint16;
-        uint32_t uint32;
-        uint64_t uint64;
-    } value;
+    union evsql_item_value value;
+    
+    // (internal) flags
+    struct {
+        char has_value : 1;
+    } flags;
 };
 
 /*
@@ -146,9 +154,9 @@ struct evsql_result_info {
 /*
  * Callback for handling query results.
  *
- * The query has completed, either succesfully or unsuccesfully (nonzero .error).
+ * The query has completed, either succesfully or unsuccesfully.
  *
- * Use the evsql_result_* functions to manipulate the results.
+ * Use the evsql_result_* functions to manipulate the results, and call evsql_result_free (or equivalent) once done.
  */
 typedef void (*evsql_query_cb)(struct evsql_result *res, void *arg);
 
@@ -162,19 +170,20 @@ typedef void (*evsql_query_cb)(struct evsql_result *res, void *arg);
 typedef void (*evsql_error_cb)(struct evsql *evsql, void *arg);
 
 /*
- * Callback for handling transaction-level errors.
+ * Callback for handling transaction-level errors. This may be called at any time during a transaction's lifetime,
+ * including from within the evsql_query_* functions.
  *
  * The transaction is not useable anymore.
  */
 typedef void (*evsql_trans_error_cb)(struct evsql_trans *trans, void *arg);
 
 /*
- * The transaction is ready for use.
+ * Callback for handling evsql_trans/evsql_query_abort completion. The transaction is ready for use with evsql_query_*.
  */
 typedef void (*evsql_trans_ready_cb)(struct evsql_trans *trans, void *arg);
 
 /*
- * The transaction was commited, and should not be used anymore.
+ * Callback for handling evsql_trans_commit completion. The transaction was commited, and should not be used anymore.
  */
 typedef void (*evsql_trans_done_cb)(struct evsql_trans *trans, void *arg);
 
@@ -183,32 +192,52 @@ typedef void (*evsql_trans_done_cb)(struct evsql_trans *trans, void *arg);
  *
  * The given conninfo must stay valid for the duration of the evsql's lifetime.
  */
-struct evsql *evsql_new_pq (struct event_base *ev_base, const char *pq_conninfo, evsql_error_cb error_fn, void *cb_arg);
+struct evsql *evsql_new_pq (struct event_base *ev_base, const char *pq_conninfo, 
+    evsql_error_cb error_fn, 
+    void *cb_arg
+);
 
 /*
  * Create a new transaction.
  *
- * Transactions are separate connections that provide transaction-isolation.
+ * A transaction will be allocated its own connection, and the "BEGIN TRANSACTION ..." query will be sent (use the
+ * evsql_trans_type argument to specify this). 
  *
- * Once the transaction is ready for use, ready_fn will be called. If the transaction fails, any pending query will be
- * forgotten, and error_fn called. This also includes some (but not all) cases where evsql_query returns nonzero.
+ * Once the transaction has been opened, the given evsql_trans_ready_cb will be triggered, and the transaction can then
+ * be used (see evsql_query_*).
  *
+ * If, at any point, the transaction-connection fails, and pending query will be forgotten (i.e. the query callback
+ * will NOT be called), and the given evsql_trans_error_cb will be called. Note that this includes some, but not all,
+ * cases where evsql_query_* returns an error.
+ *
+ * Once you are done with the transaction, call either evsql_trans_commit or evsql_trans_abort.
  */
-struct evsql_trans *evsql_trans (struct evsql *evsql, enum evsql_trans_type type, evsql_trans_error_cb error_fn, evsql_trans_ready_cb ready_fn, evsql_trans_done_cb done_fn, void *cb_arg);
+struct evsql_trans *evsql_trans (struct evsql *evsql, enum evsql_trans_type type, 
+    evsql_trans_error_cb error_fn, 
+    evsql_trans_ready_cb ready_fn, 
+    evsql_trans_done_cb done_fn, 
+    void *cb_arg
+);
 
 /*
  * Queue the given query for execution.
  *
  * If trans is specified (not NULL), then the transaction must be idle, and the query will be executed in that
- * transaction's context. Otherwise, the query will be executed without a transaction, andmay be executed immediately,
- * or if other similar queries are running, it will be queued for later execution.
+ * transaction's context. Otherwise, the query will be executed without a transaction using an idle connection, or
+ * enqueued for later execution.
  *
- * Once the query is complete (got a result, got an error, the connection failed), then the query_cb will be triggered.
+ * Once the query is complete (got a result, got an error, the connection failed), then the query_cb will be called.
+ * The callback can used the evsql_result_* functions to manipulate it.
+ *
+ * The returned evsql_query handle can be passed to evsql_query_abort at any point before query_fn being called. 
+ *
  */
 struct evsql_query *evsql_query (struct evsql *evsql, struct evsql_trans *trans, const char *command, evsql_query_cb query_fn, void *cb_arg);
 
 /*
- * Same as evsql_query, but uses the SQL-level support for binding parameters.
+ * Execute the given SQL query using the list of parameter types/values given via evsql_query_params.
+ *
+ * See evsql_query for more info about behaviour.
  */
 struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans *trans, 
     const char *command, const struct evsql_query_params *params, 
@@ -216,7 +245,10 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
 );
 
 /*
- * Execute the given query_info, using the parameter list in query_info to resolve the given variable arugments
+ * Execute the given query_info's SQL query using the values given as variable arguments, using the evsql_query_info to
+ * resolve the types.
+ *
+ * See evsql_query for more info about behaviour.
  */
 struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *trans, 
     const struct evsql_query_info *query_info,
@@ -225,30 +257,38 @@ struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *t
 );
 
 /*
- * Abort a query, the query callback will not be called, the query and any possible results will be discarded.
+ * Abort a query returned by evsql_query_* that has not yet completed (query_fn has not been called yet).
  *
- * This does not garuntee that the query will not execute, simply that you won't get the results.
+ * The actual query itself may or may not be aborted (and hence may or may not be executed on the server), but query_fn
+ * will not be called anymore, and the query will dispose of itself and any results returned.
  *
  * If the query is part of a transaction, then trans must be given, and the query must be the query that is currently
- * executing on that trans. The transaction's ready_fn will be called once the query has been aborted.
+ * executing on that trans. The transaction's ready_fn will be called once the query has been aborted and the
+ * transaction is now idle again.
  */
 void evsql_query_abort (struct evsql_trans *trans, struct evsql_query *query);
 
 /*
- * Commit a transaction, calling done_fn if it was succesfull (error_fn otherwise).
+ * Commit a transaction using "COMMIT TRANSACTION".
  *
- * trans must be idle, just like for evsql_query.
- *
- * done_fn will never be called directly, always via the event loop.
+ * The transaction must be idle, just like for evsql_query. Once the transaction has been commited, the transaction's
+ * done_fn will be called, after which the transaction must not be used.
  *
  * You cannot abort a COMMIT, calling trans_abort on trans after a succesful trans_commit is a FATAL error.
+ *
+ * Note that done_fn will never be called directly, always indirectly via the event loop.
  */
 int evsql_trans_commit (struct evsql_trans *trans);
 
 /*
- * Abort a transaction, rolling it back. No callbacks will be called.
+ * Abort a transaction, using "ROLLBACK TRANSACTION".
+ *
+ * No more transaction callbacks will be called, if there was a query running, it will be aborted, and the transaction
+ * then rollback'd.
  *
  * You cannot abort a COMMIT, calling trans_abort on trans after a succesful trans_commit is a FATAL error.
+ * 
+ * Do not call evsql_trans_abort from within evsql_trans_error_cb!
  */
 void evsql_trans_abort (struct evsql_trans *trans);
 
@@ -280,17 +320,50 @@ void evsql_query_debug (const char *sql, const struct evsql_query_params *params
  * Result-handling functions
  */
 
-// get error message associated with function
-const char *evsql_result_error (const struct evsql_result *res);
+/*
+ * Check the result for errors. Intended for use with non-data queries, i.e. CREATE, etc.
+ *
+ * Returns zero if the query was OK, err otherwise. EIO indicates an SQL error, the error message can be retrived
+ * using evsql_result_error.
+ */
+err_t evsql_result_check (struct evsql_result *res);
 
 /*
- * Iterator-based interface.
+ * The iterator-based interface results interface.
  *
- * Call result_begin to check for errors, then result_next to fetch rows, and finally result_end to release.
+ * Define an evsql_result_info struct that describes the columns returned by the query, and call evsql_result_begin on
+ * the evsql_result. This verifies the query result, and then prepares it for iteration using evsql_result_next.
+ *
+ * Call evsql_result_end once you've stopped iteration.
+ *
+ * Returns zero if the evsql_result is ready for iteration, err otherwise. EIO indicates an SQL error, the error
+ * message can be retreived using evsql_result_error.
+ *
+ * Note: currently the iterator state is simply stored in evsql_result, so only one iterator at a time per evsql_result.
  */
 err_t evsql_result_begin (struct evsql_result_info *info, struct evsql_result *res);
+
+/*
+ * Reads the next result row, storing the field values into the pointer arguments given. The types are resolved using
+ * the evsql_result_info given to evsql_result_begin.
+ *
+ * Returns >0 when a row was read, 0 when there are no more rows, and -err if there was an error.
+ */
 int evsql_result_next (struct evsql_result *res, ...);
+
+/*
+ * Ends the result iteration, releasing any associated resources and the result itself.
+ *
+ * The result should not be iterated or accessed anymore.
+ *
+ * Note: this does the same thing as evsql_result_free, and works regardless of evsql_result_begin returning
+ * succesfully or not.
+ */
 void evsql_result_end (struct evsql_result *res);
+
+
+// get error message associated with function
+const char *evsql_result_error (const struct evsql_result *res);
 
 // number of rows in the result
 size_t evsql_result_rows (const struct evsql_result *res);

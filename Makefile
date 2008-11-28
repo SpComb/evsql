@@ -24,13 +24,14 @@ endif
 DEFINES = -D_FILE_OFFSET_BITS=64
 FIXED_CFLAGS = -Wall -std=gnu99
 
-BIN_NAMES = helloworld hello simple_hello evpq_test url_test dbfs
+BIN_NAMES = helloworld hello simple_hello evpq_test url_test dbfs evsql_test
 BIN_PATHS = $(addprefix bin/,$(BIN_NAMES))
 
 # modules
 module_objs = $(patsubst src/%.c,obj/%.o,$(wildcard src/$(1)/*.c))
 
 # complex modules
+CORE_OBJS = obj/lib/log.o obj/lib/signals.o
 EVSQL_OBJS = $(call module_objs,evsql) obj/evpq.o
 DBFS_OBJS = $(call module_objs,dbfs) obj/dirbuf.o 
 
@@ -39,11 +40,12 @@ all: ${BIN_PATHS}
 
 # binaries
 bin/helloworld: 
-bin/hello: obj/evfuse.o obj/dirbuf.o obj/lib/log.o obj/lib/signals.o
-bin/simple_hello: obj/evfuse.o obj/dirbuf.o obj/lib/log.o obj/lib/signals.o obj/simple.o
+bin/hello: obj/evfuse.o obj/dirbuf.o ${CORE_OBJS}
+bin/simple_hello: obj/evfuse.o obj/dirbuf.o obj/simple.o ${CORE_OBJS}
 bin/evpq_test: obj/evpq.o obj/lib/log.o
 bin/url_test: obj/lib/url.o obj/lib/lex.o obj/lib/log.o
-bin/dbfs: ${DBFS_OBJS} ${EVSQL_OBJS} obj/evfuse.o obj/lib/log.o obj/lib/signals.o
+bin/dbfs: ${DBFS_OBJS} ${EVSQL_OBJS} obj/evfuse.o ${CORE_OBJS}
+bin/evsql_test: ${EVSQL_OBJS} ${CORE_OBJS}
 
 # computed
 LDFLAGS = ${LIBRARY_PATHS}

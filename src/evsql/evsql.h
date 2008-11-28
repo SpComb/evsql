@@ -97,6 +97,13 @@ struct evsql_trans {
 };
 
 /*
+ * Backend result handle
+ */
+union evsql_result_handle {
+    PGresult *pq;
+};
+
+/*
  * A single query.
  *
  * Has the info needed to exec the query (as these may be queued), and the callback/result info.
@@ -114,12 +121,18 @@ struct evsql_query {
         int *lengths;
         int *formats;
 
+        // storage for numeric values
+        union evsql_item_value *item_vals;
+
         int result_format;
     } params;
 
     // our callback
     evsql_query_cb cb_fn;
     void *cb_arg;
+        
+    // the result we get
+    union evsql_result_handle result;
 
     // our position in the query list
     TAILQ_ENTRY(evsql_query) entry;
@@ -127,11 +140,13 @@ struct evsql_query {
 
 // the result
 struct evsql_result {
-    int error;
+    struct evsql *evsql;
 
-    union {
-        PGresult *pq;
-    } result;
+    // possible error code
+    int error;
+    
+    // the actual result
+    union evsql_result_handle result;
 
     // result_* state
     struct evsql_result_info *info;
@@ -155,7 +170,7 @@ struct evsql_result {
  *
  * Returns the new evsql_query on success, NULL on failure.
  */
-static struct evsql_query *_evsql_query_new (struct evsql *evsql, struct evsql_trans *trans, evsql_query_cb query_fn, void *cb_arg);
+struct evsql_query *_evsql_query_new (struct evsql *evsql, struct evsql_trans *trans, evsql_query_cb query_fn, void *cb_arg);
 
 /*
  * Begin processing the given query, which should now be fully filled out.
@@ -165,11 +180,13 @@ static struct evsql_query *_evsql_query_new (struct evsql *evsql, struct evsql_t
  *
  * Returns zero on success, nonzero on failure.
  */
-static int _evsql_query_enqueue (struct evsql *evsql, struct evsql_trans *trans, struct evsql_query *query, const char *command);
+int _evsql_query_enqueue (struct evsql *evsql, struct evsql_trans *trans, struct evsql_query *query, const char *command);
 
 /*
- * Validate and allocate the basic stuff for a new query.
+ * Free the query and related resources, doesn't trigger any callbacks or remove from any queues.
+ *
+ * The command should already be taken care of (NULL).
  */
-
+void _evsql_query_free (struct evsql_query *query);
 
 #endif /* EVSQL_INTERNAL_H */

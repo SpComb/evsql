@@ -1,5 +1,10 @@
 
 #include "evsql.h"
+#include "../lib/error.h"
+#include "../lib/misc.h"
+
+#include <stdlib.h>
+#include <assert.h>
 
 /*
  * Initialize params->types/values/lengths/formats, params->count, params->result_format based on the given args
@@ -11,20 +16,21 @@ static int _evsql_query_params_init_pq (struct evsql_query_params_pq *params, si
     // allocate vertical storage for the parameters
     if (0
         
-        ||  !(query->params.types    = calloc(query->params.count, sizeof(Oid)))
-        ||  !(query->params.values   = calloc(query->params.count, sizeof(char *)))
-        ||  !(query->params.lengths  = calloc(query->params.count, sizeof(int)))
-        ||  !(query->params.formats  = calloc(query->params.count, sizeof(int)))
+        ||  !(params->types     = calloc(param_count, sizeof(Oid)))
+        ||  !(params->values    = calloc(param_count, sizeof(char *)))
+        ||  !(params->lengths   = calloc(param_count, sizeof(int)))
+        ||  !(params->formats   = calloc(param_count, sizeof(int)))
+        ||  !(params->item_vals = calloc(param_count, sizeof(union evsql_item_value)))
     )
         ERROR("calloc");
 
     // result format
     switch (result_format) {
         case EVSQL_FMT_TEXT:
-            params.result_format = 0; break;
+            params->result_format = 0; break;
 
         case EVSQL_FMT_BINARY:
-            params.result_format = 1; break;
+            params->result_format = 1; break;
 
         default:
             FATAL("params.result_fmt: %d", result_format);
@@ -74,15 +80,19 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
         count++;
     
     // initialize params
-    evsql_query_params_init_pq(&query->params, count, params->result_format);
+    _evsql_query_params_init_pq(&query->params, count, params->result_format);
 
     // transform
     for (param = params->list, idx = 0; param->info.type; param++, idx++) {
         // `set for NULLs, otherwise not
         query->params.types[idx] = param->bytes ? 0 : EVSQL_PQ_ARBITRARY_TYPE_OID;
+
+        // scalar values
+        query->params.item_vals[idx] = param->value;
         
         // values
-        query->params.values[idx] = param->bytes;
+        // point this at the value stored in the item_vals union if flagged as such
+        query->params.values[idx] = param->flags.has_value ? (const char *) &query->params.item_vals[idx] : param->bytes;
 
         // lengths
         query->params.lengths[idx] = param->length;
@@ -133,10 +143,10 @@ struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *t
         count++;
     
     // initialize params
-    evsql_query_params_init_pq(&query->params, count, EVSQL_FMT_BINARY);
+    _evsql_query_params_init_pq(&query->params, count, EVSQL_FMT_BINARY);
 
     // transform
-    for (param = params->params, idx = 0; param->info.type; param++, idx++) {
+    for (param = query_info->params, idx = 0; param->type; param++, idx++) {
         // default type to 0 (implicit)
         query->params.types[idx] = 0;
 
@@ -144,7 +154,7 @@ struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *t
         query->params.formats[idx] = EVSQL_FMT_BINARY;
 
         // consume argument
-        switch (param->info.type) {
+        switch (param->type) {
             case EVSQL_TYPE_NULL_: {
                 // explicit type + text fmt
                 query->params.types[idx] = EVSQL_PQ_ARBITRARY_TYPE_OID;
@@ -157,8 +167,8 @@ struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *t
                 struct evsql_item_binary item = va_arg(vargs, struct evsql_item_binary);
                 
                 // value + explicit len
-                query->params.values[idx] = item->ptr;
-                query->params.lengths[idx] = item->len;
+                query->params.values[idx] = item.ptr;
+                query->params.lengths[idx] = item.len;
             } break;
 
             case EVSQL_TYPE_STRING: {
@@ -171,13 +181,15 @@ struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *t
             } break;
             
             case EVSQL_TYPE_UINT16: {
-                uint16_t uval = va_arg(vargs, uint16_t);
+                // XXX: uint16_t is passed as `int'?
+                uint16_t uval = va_arg(vargs, int);
 
                 if (uval != (int16_t) uval)
                     ERROR("param $%zu: uint16 overflow: %d", idx + 1, uval);
                 
                 // network-byte-order value + explicit len
-                query->params.values[idx] = htons(uval);
+                query->params.item_vals[idx].uint16 = htons(uval);
+                query->params.values[idx] = (const char *) &query->params.item_vals[idx];
                 query->params.lengths[idx] = sizeof(uint16_t);
             } break;
             
@@ -185,10 +197,11 @@ struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *t
                 uint32_t uval = va_arg(vargs, uint32_t);
 
                 if (uval != (int32_t) uval)
-                    ERROR("param $%zu: uint32 overflow: %ld", idx + 1, uval);
+                    ERROR("param $%zu: uint32 overflow: %ld", idx + 1, (unsigned long) uval);
                 
                 // network-byte-order value + explicit len
-                query->params.values[idx] = htonl(uval);
+                query->params.item_vals[idx].uint32 = htonl(uval);
+                query->params.values[idx] = (const char *) &query->params.item_vals[idx];
                 query->params.lengths[idx] = sizeof(uint32_t);
             } break;
 
@@ -196,20 +209,21 @@ struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *t
                 uint64_t uval = va_arg(vargs, uint64_t);
 
                 if (uval != (int64_t) uval)
-                    ERROR("param $%zu: uint16 overflow: %lld", idx + 1, uval);
+                    ERROR("param $%zu: uint16 overflow: %lld", idx + 1, (unsigned long long) uval);
                 
                 // network-byte-order value + explicit len
-                query->params.values[idx] = htonq(uval);
+                query->params.item_vals[idx].uint64 = htonq(uval);
+                query->params.values[idx] = (const char *) &query->params.item_vals[idx];
                 query->params.lengths[idx] = sizeof(uint64_t);
             } break;
             
             default: 
-                FATAL("param $%zu: invalid type: %d", idx + 1, param->info.type);
+                FATAL("param $%zu: invalid type: %d", idx + 1, param->type);
         }
     }
 
     // execute it
-    if (_evsql_query_enqueue(evsql, trans, query, command))
+    if (_evsql_query_enqueue(evsql, trans, query, query_info->sql))
         goto error;
     
     // no error, fallthrough for va_end
