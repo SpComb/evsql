@@ -155,9 +155,12 @@ struct evsql_result_info {
  * Macros for defining param/result infos/lists
  */
 #define EVSQL_PARAMS(result_fmt)            { result_fmt, 
-#define EVSQL_PARAM(typenam)                    {{ EVSQL_FMT_BINARY, EVSQL_TYPE_ ## typenam }}
-#define EVSQL_PARAMS_END                        {{ EVSQL_FMT_BINARY, EVSQL_TYPE_INVALID }} \
+#define EVSQL_PARAM(typenam)                    { EVSQL_TYPE(typenam) }
+#define EVSQL_PARAMS_END                        { EVSQL_TYPE_END } \
                                               } // <<<
+
+#define EVSQL_TYPE(typenam)                     { EVSQL_FMT_BINARY, EVSQL_TYPE_ ## typenam  }
+#define EVSQL_TYPE_END                          { EVSQL_FMT_BINARY, EVSQL_TYPE_INVALID      }
 
 
 /*

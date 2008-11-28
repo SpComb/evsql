@@ -64,30 +64,27 @@ void dbfs_lookup (struct fuse_req *req, fuse_ino_t parent, const char *name) {
     int err;
 
     INFO("[dbfs.lookup] parent=%lu name=%s", parent, name);
-    
-    // query and params
-    const char *sql = 
-        "SELECT"
-        " inodes.ino, " DBFS_STAT_COLS
-        " FROM file_tree INNER JOIN inodes ON (file_tree.ino = inodes.ino)"
-        " WHERE file_tree.parent = $1::int4 AND file_tree.name = $2::varchar";
-    
-    static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
-        EVSQL_PARAM ( UINT32 ),
-        EVSQL_PARAM ( STRING ),
 
-        EVSQL_PARAMS_END
+    // query info
+    static struct evsql_query_info query_info = {
+        .sql    =   "SELECT"
+                    " inodes.ino, " DBFS_STAT_COLS
+                    " FROM file_tree INNER JOIN inodes ON (file_tree.ino = inodes.ino)"
+                    " WHERE file_tree.parent = $1::int4 AND file_tree.name = $2::varchar",
+        
+        .params =   {
+            EVSQL_TYPE ( UINT32 ),
+            EVSQL_TYPE ( STRING ),
+
+            EVSQL_TYPE_END
+        }
     };
-    
-    // build params
-    if (0
-        ||  evsql_param_uint32(&params, 0, parent)
-        ||  evsql_param_string(&params, 1, name)
-    )
-        EERROR(err = EIO, "evsql_param_*");
 
     // query
-    if ((query = evsql_query_params(ctx->db, NULL, sql, &params, dbfs_entry_res, req)) == NULL)
+    if ((query = evsql_query_exec(ctx->db, NULL, &query_info, dbfs_entry_res, req,
+        (uint32_t) parent,
+        (const char *) name
+    )) == NULL)
         EERROR(err = EIO, "evsql_query_params");
 
     // handle interrupts
@@ -101,24 +98,33 @@ error:
         EWARNING(err, "fuse_reply_err");
 }
 
-void _dbfs_readlink_res (struct evsql_result *res, void *arg) {
+void dbfs_readlink_res (struct evsql_result *res, void *arg) {
     struct fuse_req *req = arg;
     int err = 0;
     
     uint32_t ino;
     const char *type, *link;
 
-    // check the results
-    if ((err = _dbfs_check_res(res, 1, 3)))
-        SERROR(err = (err ==  1 ? ENOENT : EIO));
-        
-    // get our data
-    if (0
-        ||  evsql_result_uint32(res, 0, 0, &ino,        0 ) // inodes.ino
-        ||  evsql_result_string(res, 0, 1, &type,       0 ) // inodes.type
-        ||  evsql_result_string(res, 0, 2, &link,       1 ) // inodes.link_path
-    )
-        EERROR(err = EIO, "invalid db data");
+    // result info
+    static struct evsql_result_info result_info = {
+        0, {
+            EVSQL_TYPE ( UINT32 ),
+            EVSQL_TYPE ( STRING ),
+            EVSQL_TYPE ( STRING ),
+
+            EVSQL_TYPE_END
+        }
+    };
+
+    // begin
+    if ((err = evsql_result_begin(&result_info, res)))
+        EERROR(err, "evsql_result_begin");
+
+    // get the row of data
+    if ((err = evsql_result_next(res,
+        &ino, &type, &link
+    )) <= 0)
+        SERROR(err = err || ENOENT);
     
     // is it a symlink?
     if (_dbfs_mode(type) != S_IFLNK)
@@ -144,27 +150,25 @@ void dbfs_readlink (struct fuse_req *req, fuse_ino_t ino) {
     int err;
     
     INFO("[dbfs.readlink %p] ino=%lu", req, ino);
+    
+    // query info
+    static struct evsql_query_info query_info = {
+        .sql    =   "SELECT"
+                    " inodes.ino, inodes.type, inodes.link_path"
+                    " FROM inodes"
+                    " WHERE inodes.ino = $1::int4",
 
-    const char *sql =
-        "SELECT"
-        " inodes.ino, inodes.type, inodes.link_path"
-        " FROM inodes"
-        " WHERE inodes.ino = $1::int4";
+        .params =   {
+            EVSQL_TYPE ( UINT32 ),
 
-    static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
-        EVSQL_PARAM ( UINT32 ),
-
-        EVSQL_PARAMS_END
+            EVSQL_TYPE_END
+        }
     };
 
-    // build params
-    if (0
-        ||  evsql_param_uint32(&params, 0, ino)
-    )
-        SERROR(err = EIO);
-        
     // query
-    if ((query = evsql_query_params(ctx->db, NULL, sql, &params, _dbfs_readlink_res, req)) == NULL)
+    if ((query = evsql_query_exec(ctx->db, NULL, &query_info, dbfs_readlink_res, req,
+        (uint32_t) ino
+    )) == NULL)
         SERROR(err = EIO);
 
     // handle interrupts
@@ -179,17 +183,14 @@ error:
 
 }
 
-#define SETERR(err_var, err_val, bool_val) ((err_var) = bool_val ? (err_val) : 0)
-
 void dbfs_unlink_res (struct evsql_result *res, void *arg) {
     struct fuse_req *req = arg;
     int err = 0;
+
+    // check
+    if ((err = evsql_result_check(res)))
+        ERROR("evsql_result_check: %s", evsql_result_error(res));
     
-    // check the results
-    // XXX: reply with ENOTEMPTY if it fails due to this inode being a dir
-    if ((err = dbfs_check_result(res, 1, 0)))
-        goto error;
-        
     INFO("\t[dbfs.unlink %p] -> OK", req);
     
     // reply
@@ -210,28 +211,26 @@ void dbfs_unlink (struct fuse_req *req, fuse_ino_t parent, const char *name) {
     int err;
     
     INFO("[dbfs.unlink %p] parent=%lu, name=%s", req, parent, name);
+    
+    // query info
+    static struct evsql_query_info query_info = {
+        .sql    =   "DELETE"
+                    " FROM file_tree"
+                    " WHERE parent = $1::int4 AND name = $2::varchar",
+        
+        .params =   {
+            EVSQL_TYPE ( UINT32 ),
+            EVSQL_TYPE ( STRING ),
 
-    const char *sql =
-        "DELETE"
-        " FROM file_tree"
-        " WHERE parent = $1::int4 AND name = $2::varchar";
-
-    static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
-        EVSQL_PARAM ( UINT32 ),
-        EVSQL_PARAM ( STRING ),
-
-        EVSQL_PARAMS_END
+            EVSQL_TYPE_END
+        }
     };
 
-    // build params
-    if (0
-        ||  evsql_param_uint32(&params, 0, parent)
-        ||  evsql_param_string(&params, 1, name)
-    )
-        SERROR(err = EIO);
-        
     // query
-    if ((query = evsql_query_params(ctx->db, NULL, sql, &params, dbfs_unlink_res, req)) == NULL)
+    if ((query = evsql_query_exec(ctx->db, NULL, &query_info, dbfs_unlink_res, req,
+        (uint32_t) parent,
+        (const char *) name
+    )) == NULL)
         SERROR(err = EIO);
 
     // handle interrupts
@@ -252,27 +251,25 @@ void dbfs_link (struct fuse_req *req, fuse_ino_t ino, fuse_ino_t newparent, cons
     
     INFO("[dbfs.link %p] ino=%lu, newparent=%lu, newname=%s", req, ino, newparent, newname);
 
-    const char *sql =
-        "SELECT ino, type, mode, size, nlink FROM dbfs_link($1::int4, $2::int4, $3::varchar)";
+    // query info
+    static struct evsql_query_info query_info = {
+        .sql    =   "SELECT ino, type, mode, size, nlink FROM dbfs_link($1::int4, $2::int4, $3::varchar)",
 
-    static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
-        EVSQL_PARAM ( UINT32 ),
-        EVSQL_PARAM ( UINT32 ),
-        EVSQL_PARAM ( STRING ),
+        .params =   {
+            EVSQL_TYPE ( UINT32 ),
+            EVSQL_TYPE ( UINT32 ),
+            EVSQL_TYPE ( STRING ),
 
-        EVSQL_PARAMS_END
+            EVSQL_TYPE_END
+        }
     };
 
-    // build params
-    if (0
-        ||  evsql_param_uint32(&params, 0, ino)
-        ||  evsql_param_uint32(&params, 1, newparent)
-        ||  evsql_param_string(&params, 2, newname)
-    )
-        SERROR(err = EIO);
-        
     // query
-    if ((query = evsql_query_params(ctx->db, NULL, sql, &params, dbfs_entry_res, req)) == NULL)
+    if ((query = evsql_query_exec(ctx->db, NULL, &query_info, dbfs_entry_res, req,
+        (uint32_t) ino,
+        (uint32_t) newparent,
+        (const char *) newname
+    )) == NULL)
         SERROR(err = EIO);
 
     // handle interrupts
@@ -285,3 +282,4 @@ error:
     if ((err = -fuse_reply_err(req, err)))
         EWARNING(err, "fuse_reply_err");   
 }
+

@@ -80,8 +80,6 @@ error:
 }
 
 int _dbfs_stat_info (struct stat *st, struct dbfs_stat_values *values) {
-    int err = 0;
-    
     INFO("\tst_mode=S_IF%s | %ho, st_nlink=%llu, st_size=%llu", values->type, values->mode, (long long unsigned int) values->nlink, (long long unsigned int) values->size);
 
     // convert and store
@@ -91,9 +89,6 @@ int _dbfs_stat_info (struct stat *st, struct dbfs_stat_values *values) {
     
     // good
     return 0;
-
-error:
-    return err;
 }
 
 
