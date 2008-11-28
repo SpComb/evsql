@@ -27,9 +27,6 @@ struct dbfs {
 // XXX: not sure how this should work
 #define CACHE_TIMEOUT 1.0
 
-// columns used for stat_info
-#define DBFS_STAT_COLS " inodes.type, inodes.mode, dbfs_size(inodes.type, inodes.data, inodes.link_path), (SELECT COUNT(*) FROM inodes i LEFT JOIN file_tree ft ON (i.ino = ft.ino) WHERE i.ino = inodes.ino) AS nlink"
-
 /*
  * Convert the CHAR(4) inodes.type from SQL into a mode_t.
  *
@@ -56,6 +53,30 @@ int _dbfs_check_res (struct evsql_result *res, size_t rows, size_t cols);
 err_t dbfs_check_result (struct evsql_result *res, size_t rows, size_t cols);
 
 /*
+ * Stat fields
+ */
+
+// columns used for stat_info
+#define DBFS_STAT_COLS " inodes.type, inodes.mode, dbfs_size(inodes.type, inodes.data, inodes.link_path), (SELECT COUNT(*) FROM inodes i LEFT JOIN file_tree ft ON (i.ino = ft.ino) WHERE i.ino = inodes.ino) AS nlink"
+
+
+#define DBFS_STAT_RESULT_INFO \
+    {   EVSQL_FMT_BINARY,   EVSQL_TYPE_STRING   },  \
+    {   EVSQL_FMT_BINARY,   EVSQL_TYPE_UINT16   },  \
+    {   EVSQL_FMT_BINARY,   EVSQL_TYPE_UINT32   },  \
+    {   EVSQL_FMT_BINARY,   EVSQL_TYPE_UINT64   }
+
+struct dbfs_stat_values {
+    const char *type;
+    uint16_t mode;
+    uint32_t size;
+    uint64_t nlink;
+};
+
+#define DBFS_STAT_RESULT_VALUES(ptr) \
+    &(ptr)->type, &(ptr)->mode, &(ptr)->size, &(ptr)->nlink
+
+/*
  * Fill a `struct state` with info retrieved from a SQL query.
  *
  * The result must contain four columns, starting at the given offset:
@@ -63,7 +84,7 @@ err_t dbfs_check_result (struct evsql_result *res, size_t rows, size_t cols);
  *
  * Note that this does not fill the st_ino field
  */
-int _dbfs_stat_info (struct stat *st, struct evsql_result *res, size_t row, size_t col_offset);
+int _dbfs_stat_info (struct stat *st, struct dbfs_stat_values *values);
 
 /** interrupt.c 
  *  

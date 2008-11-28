@@ -79,29 +79,15 @@ error:
     return err;
 }
 
-int _dbfs_stat_info (struct stat *st, struct evsql_result *res, size_t row, size_t col_offset) {
+int _dbfs_stat_info (struct stat *st, struct dbfs_stat_values *values) {
     int err = 0;
     
-    uint16_t mode;
-    uint32_t size = 0;  // NULL for non-REG inodes
-    uint64_t nlink = 0; // will be NULL for non-GROUP BY queries
-    const char *type;
-    
-    // extract the data
-    if ((0
-        ||  evsql_result_string(res, row, col_offset + 0, &type,       0 ) // inodes.type
-        ||  evsql_result_uint16(res, row, col_offset + 1, &mode,       0 ) // inodes.mode
-        ||  evsql_result_uint32(res, row, col_offset + 2, &size,       1 ) // size
-        ||  evsql_result_uint64(res, row, col_offset + 3, &nlink,      1 ) // count(*)
-    ) && (err = EIO))
-        ERROR("invalid db data");
-
-    INFO("\tst_mode=S_IF%s | %ho, st_nlink=%llu, st_size=%llu", type, mode, (long long unsigned int) nlink, (long long unsigned int) size);
+    INFO("\tst_mode=S_IF%s | %ho, st_nlink=%llu, st_size=%llu", values->type, values->mode, (long long unsigned int) values->nlink, (long long unsigned int) values->size);
 
     // convert and store
-    st->st_mode = _dbfs_mode(type) | mode;
-    st->st_nlink = nlink;
-    st->st_size = size;
+    st->st_mode = _dbfs_mode(values->type) | values->mode;
+    st->st_nlink = values->nlink;
+    st->st_size = values->size;
     
     // good
     return 0;

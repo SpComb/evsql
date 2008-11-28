@@ -15,27 +15,34 @@ void _dbfs_attr_res (struct evsql_result *res, void *arg) {
     int err = 0;
     
     uint32_t ino;
+    struct dbfs_stat_values stat_values;
 
-    // check the results
-    if ((err = _dbfs_check_res(res, 1, 5)))
-        SERROR(err = (err ==  1 ? ENOENT : EIO));
-        
-    // get our data
-    if (0
-        ||  evsql_result_uint32(res, 0, 0, &ino,        0 ) // inodes.ino
-    )
-        EERROR(err = EIO, "invalid db data");
- 
-        
+    // result info
+    static struct evsql_result_info result_info = {
+        0, {
+            {   EVSQL_FMT_BINARY,   EVSQL_TYPE_UINT32   },  // inodes.ino
+            DBFS_STAT_RESULT_INFO,
+            {   0,                  0                   }
+        }
+    };
+
+    // begin
+    if ((err = evsql_result_begin(&result_info, res)))
+        EERROR(err, "query failed");
+
+    // get the one row of data
+    if ((err = evsql_result_next(res, &ino, DBFS_STAT_RESULT_VALUES(&stat_values))) <= 0)
+        EERROR(err = (err ? err : ENOENT), "evsql_result_next");
+
     INFO("\t[dbfs.getattr %p] -> ino=%lu, stat follows", req, (unsigned long int) ino);
-    
+
     // inode
     st.st_ino = ino;
 
     // stat attrs
-    if ((err = _dbfs_stat_info(&st, res, 0, 1)))
+    if ((err = _dbfs_stat_info(&st, &stat_values)))
         goto error;
-
+    
     // reply
     if ((err = fuse_reply_attr(req, &st, st.st_nlink ? CACHE_TIMEOUT : 0)))
         EERROR(err, "fuse_reply_entry");
