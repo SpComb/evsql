@@ -116,7 +116,7 @@ err_t evsql_result_begin (struct evsql_result_info *info, struct evsql_result *r
 
     // correct number of columns
     if (evsql_result_cols(res) != cols)
-        XERROR(err = EINVAL, "wrong number of columns: %zu -> %zu", cols, evsql_result_cols(res));
+        XERROR(err = EINVAL, "wrong number of columns: %zu, should be %zu", evsql_result_cols(res), cols);
     
     // assign
     res->info = info;
@@ -226,6 +226,9 @@ int evsql_result_next (struct evsql_result *res, ...) {
                 XERROR(err = EINVAL, "r%zu:c%zu: invalid type: %d", row_idx, col_idx, col->type);
         }
     }
+
+    // advance row index
+    res->row_offset++;
 
     // row handled succesfully
     return 1;
