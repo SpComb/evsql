@@ -87,6 +87,13 @@ void query_send (struct evsql *db, struct evsql_trans *trans) {
     INFO("[evsql_test.query_send] enqueued query, trans=%p: %p: %d", trans, query, query_id);
 }
 
+void trans_commit (struct evsql_test_ctx *ctx) {
+    if (evsql_trans_commit(ctx->trans))
+        FATAL("evsql_trans_commit failed");
+    
+    INFO("[evsql_test.trans_commit] commiting transaction");
+}
+
 void trans_insert_result (struct evsql_result *res, void *arg) {
     struct evsql_test_ctx *ctx = arg;
     err_t err;
@@ -121,6 +128,9 @@ void trans_insert_result (struct evsql_result *res, void *arg) {
 
     // done
     evsql_result_end(res);
+
+    // commit the transaction
+    trans_commit(ctx);
 }
 
 void trans_insert (struct evsql_test_ctx *ctx) {
@@ -186,7 +196,7 @@ void trans_create_query (struct evsql_test_ctx *ctx) {
 void trans_error (struct evsql_trans *trans, void *arg) {
     struct evsql_test_ctx *ctx = arg;
 
-    FATAL("[evsql_test.trans_error] failure: %s", evsql_trans_error(trans));
+    FATAL("[evsql_test.trans_error] failure: trans=%p: %s", ctx->trans, evsql_trans_error(trans));
 }
 
 void trans_ready (struct evsql_trans *trans, void *arg) {
@@ -200,7 +210,7 @@ void trans_ready (struct evsql_trans *trans, void *arg) {
 void trans_done (struct evsql_trans *trans, void *arg) {
     struct evsql_test_ctx *ctx = arg;
 
-    INFO("[evsql_test.trans_done] done");
+    INFO("[evsql_test.trans_done] done: trans=%p", ctx->trans);
 }
 
 void begin_transaction (struct evsql_test_ctx *ctx) {

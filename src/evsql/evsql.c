@@ -837,7 +837,7 @@ int evsql_trans_commit (struct evsql_trans *trans) {
         ERROR("cannot COMMIT because transaction is still busy");
     
     // query
-    if (evsql_query(trans->evsql, trans, sql, _evsql_trans_commit_res, NULL) == NULL)
+    if (evsql_query(trans->evsql, trans, sql, _evsql_trans_commit_res, trans) == NULL)
         goto error;
     
     // mark it as commited in case someone wants to abort it
