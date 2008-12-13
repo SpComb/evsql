@@ -1,0 +1,68 @@
+/**
+@mainpage evsql
+@author Tero Marttila
+
+@section Introduction
+Evsql is a C-language SQL library designed for use with libevent, and primarily PostgreSQL's libpq.
+
+Evsql was born as a result of wanting to use a SQL database from within a libevent application, and discovering
+libpq's asynchronous API. Since the libpq API is somewhat cumbersome to use, I wrote a separate interface that
+drives libpq using libevent and makes writing asynchronous SQL clients a lot easier - plus adding some conveniance
+for parametrized queries and such along the way.
+
+The evsql API doesn't expose the underlying database library's API, although since the only currently existing
+implementation is libpq, this should really be thought of as a generically-named PostgreSQL library rather than a
+database-agnostic API...
+
+@section Usage
+Include the top-level evsql.h header, making sure you also have the evpq and lib modules available.
+
+@section Connecting
+Evsql sessions are represented using an opaque struct, called simply evsql. Use the \ref evsql_ evsql_new_ function corresponding to your
+database engine (PostgreSQL -> evsql_new_pq()) to allocate this handle. It is valid for use immediately, although the 
+initial connection may not yet be complete.
+
+There is an evsql_close function, but it is currently not implemented.
+
+\ref evsql_
+
+@section Transactions
+Evsql supports both non-transactional queries and transactional queries. A transaction is allocated its own dedicated
+connection which it can use for its queries without being interfered by other queries/transactions. Evsql takes care of
+sending the initial "BEGIN TRANSACTION" query, and provides evsql_trans_commit()/evsql_trans_abort() functions to send the
+"COMMIT TRANSACTION" and "ROLLBACK TRANSACTION" queries.
+
+Note, however, that transactions can only handle one outstanding query at a time, whereas transactionless queries can
+be enqueued by evsql itself.
+
+\ref evsql_trans_
+
+@section Querying
+There is a single evsql_query function used for both transactional and non-transactional queries; you can pass NULL
+as the trans argument.
+
+The given callback function is invoked once the query has been processed and the result is available, or the query
+failed.
+
+The important distinction between transactional and non-transactional queries is that transactions only support one
+outstanding query at a time, meaning that you must wait for your callback to be invoked before calling evsql_query
+again for the transaction. Non-transactional queries are sent using an idle connection, and will be enqueued for later
+execution if no idle connections are available.
+
+evsql_query returns a handle that can be passed to evsql_query_abort to abort the query, ensuring that the callback
+given to evsql_query is not invoked, and any associated resources released.
+
+@section Parametrized Queries
+Evsql also provides functions to send parametrized queries, the behaviour of evsql_query explained above applies as
+well. 
+
+The first of these is evsql_query_params, which takes the parametrized SQL command and a struct containing the
+parameter types and values as arguments.
+
+The second of these is evsql_query_exec, which takes a evsql_query_info struct containing the parametrized SQL command
+and the parameter types, and the parameter values themselves as a list of variable arguments (of the correct type!).
+
+@section API Reference
+The entire API is defined in the top-level evsql.h header.
+
+*/

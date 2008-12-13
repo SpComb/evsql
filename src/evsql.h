@@ -65,6 +65,8 @@ struct evsql_result;
 
 /**
  * Various transaction isolation levels for conveniance
+ *
+ * @see evsql_trans
  */
 enum evsql_trans_type {
     EVSQL_TRANS_DEFAULT,
@@ -147,6 +149,8 @@ struct evsql_item_info {
 
 /**
  * An union to provide storage for the values of small types
+ *
+ * @see evsql_item
  */
 union evsql_item_value {
     /** 16-bit unsigned integer */
@@ -161,6 +165,10 @@ union evsql_item_value {
 
 /**
  * A generic structure containing the type and value of a query parameter or a result field.
+ *
+ * @see evsql_query_info
+ * @see evsql_query_params
+ * @see evsql_result_info
  */
 struct evsql_item {
     /** The "header" containing the type and format */
@@ -195,6 +203,8 @@ struct evsql_item {
  * Query meta-info, similar to a prepared statement.
  *
  * Contains the literal SQL query and the types of the parameters, but no more.
+ *
+ * @see evsql_query_exec
  */
 struct evsql_query_info {
     /** The SQL query itself */
@@ -208,6 +218,8 @@ struct evsql_query_info {
 
 /**
  * Contains the query parameter types and their actual values
+ *
+ * @see evsql_query_params
  */
 struct evsql_query_params {
     /** Requested result format for this query. XXX: move elsewhere */
@@ -221,6 +233,8 @@ struct evsql_query_params {
 
 /**
  * Result layout metadata. This contains the stucture needed to decode result rows.
+ *
+ * @see evsql_result_begin
  */
 struct evsql_result_info {
     /** XXX: make up something useful to stick here */
@@ -234,6 +248,15 @@ struct evsql_result_info {
 
 /**
  * Magic macros for defining param/result info -lists
+ *  
+ * @code
+ *  static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
+ *      EVSQL_PARAM( UINT32 ),
+ *      ...,
+ *
+ *      EVSQL_PARAMS_END
+ *  };
+ * @endcode
  *
  * @name EVSQL_TYPE/PARAM_*
  * @{
@@ -241,6 +264,8 @@ struct evsql_result_info {
 
 /**
  * A `struct evsql_item_info` initializer, using FMT_BINARY and the given EVSQL_TYPE_ -suffix.
+ *
+ * @param typenam the suffix of an evsql_item_type name
  *
  * @see struct evsql_item_info
  * @see enum evsql_item_type
@@ -255,18 +280,18 @@ struct evsql_result_info {
 #define EVSQL_TYPE_END                          { EVSQL_FMT_BINARY, EVSQL_TYPE_INVALID      }
 
 /**
- * Initializer block for a `struct evsql_query_params` struct. EVSQL_PARAMS/EVSQL_PARAMS_END should be used as a
- * pseudo-block with the following layout:
- *
- *  static struct evsql_query_params params = EVSQL_PARAMS(EVSQL_FMT_BINARY) {
- *      EVSQL_PARAM(...),
- *      ...,
- *
- *      EVSQL_PARAMS_END
- *  };
+ * Initializer block for an evsql_query_params struct
  */
 #define EVSQL_PARAMS(result_fmt)            { result_fmt, 
+
+/**
+ * An evsql_item initializer
+ */
 #define EVSQL_PARAM(typenam)                    { EVSQL_TYPE(typenam) }
+
+/**
+ * Include the ending item and terminate the pseudo-block started using #EVSQL_PARAMS
+ */
 #define EVSQL_PARAMS_END                        { EVSQL_TYPE_END } \
                                               } // <<<
 
@@ -343,6 +368,13 @@ typedef void (*evsql_trans_done_cb)(struct evsql_trans *trans, void *arg);
 // @}
 
 /**
+ * Session functions
+ *
+ * @name evsql_*
+ * @{
+ */
+
+/**
  * Create a new PostgreSQL/libpq (evpq) -based evsql using the given conninfo.
  *
  * The given conninfo must stay valid for the duration of the evsql's lifetime.
@@ -359,6 +391,18 @@ struct evsql *evsql_new_pq (struct event_base *ev_base, const char *pq_conninfo,
     evsql_error_cb error_fn, 
     void *cb_arg
 );
+
+/**
+ * Close a connection. Callbacks for waiting queries will not be run.
+ *
+ * XXX: not implemented yet.
+ *
+ * @ingroup evsql_*
+ * @param evsql the context handle from evsql_new_*
+ */
+void evsql_close (struct evsql *evsql);
+
+// @}
 
 /**
  * Query API
@@ -699,15 +743,5 @@ int evsql_result_uint64 (const struct evsql_result *res, size_t row, size_t col,
 void evsql_result_free (struct evsql_result *res);
 
 // @}
-
-/**
- * Close a connection. Callbacks for waiting queries will not be run.
- *
- * XXX: not implemented yet.
- *
- * @ingroup evsql_*
- * @param evsql the context handle from evsql_new_*
- */
-void evsql_close (struct evsql *evsql);
 
 #endif /* EVSQL_H */
