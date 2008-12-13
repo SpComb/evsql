@@ -125,7 +125,7 @@ void evsql_query_debug (const char *sql, const struct evsql_query_params *params
     }
 }
 
-int evsql_result_binary (const struct evsql_result *res, size_t row, size_t col, const char **ptr, size_t *size, int nullok) {
+int evsql_result_binary (const struct evsql_result *res, size_t row, size_t col, const char **ptr, size_t *size, bool nullok) {
     *ptr = NULL;
 
     switch (res->evsql->type) {

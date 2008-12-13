@@ -65,7 +65,7 @@ int evsql_result_null (const struct evsql_result *res, size_t row, size_t col) {
     }
 }
 
-int evsql_result_field (const struct evsql_result *res, size_t row, size_t col, char ** const ptr, size_t *size) {
+int evsql_result_field (const struct evsql_result *res, size_t row, size_t col, const char **ptr, size_t *size) {
     *ptr = NULL;
 
     switch (res->evsql->type) {
@@ -147,7 +147,7 @@ int evsql_result_next (struct evsql_result *res, ...) {
     va_start(vargs, res);
 
     for (col = res->info->columns, col_idx = 0; col->type; col++, col_idx++) {
-        char *value = NULL;
+        const char *value = NULL;
         size_t length = 0;
         
         // check for NULLs, then try and get the field value
@@ -172,7 +172,7 @@ int evsql_result_next (struct evsql_result *res, ...) {
             } break;
 
             case EVSQL_TYPE_STRING: {
-                char **str_ptr = va_arg(vargs, char **);
+                const char **str_ptr = va_arg(vargs, const char **);
 
                 if (value) {
                     *str_ptr = value;
