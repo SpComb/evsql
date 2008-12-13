@@ -13,21 +13,21 @@
  *
  * The order of function calls and callbacks goes something like this:
  *
- *  -   evsql_new_pq 
+ *  -   evsql_new_pq()
  *
- *  -   evsql_trans 
- *      -   evsql_trans_abort
- *      -   evsql_trans_error_cb
- *      -   evsql_trans_ready_cb
+ *  -   evsql_trans()
+ *      -   evsql_trans_abort()
+ *      -   evsql_trans_error_cb()
+ *      -   evsql_trans_ready_cb()
  *
- *  -   evsql_query, evsql_params_* + evsql_query_params, evsql_query_exec 
- *      -   evsql_query_abort
- *      -   evsql_query_cb
- *          -   evsql_result_*
- *          -   evsql_result_free
+ *  -   evsql_query(), \ref evsql_param_* + evsql_query_params(), evsql_query_exec()
+ *      -   evsql_query_abort()
+ *      -   evsql_query_cb()
+ *          -   \ref evsql_result_*
+ *          -   evsql_result_free()
  *
- *  -   evsql_trans_commit
- *      -   evsql_trans_done_cb
+ *  -   evsql_trans_commit()
+ *      -   evsql_trans_done_cb()
  *
  */
 
@@ -44,22 +44,39 @@
 #include "lib/err.h"
 
 /**
- * The generic context handle used to manage a single "database connector" with multiple queries/transactions.
+ * @struct evsql
+ *
+ * The generic session handle used to manage a single "database connector" with multiple queries/transactions.
+ *
+ * @see \ref evsql_
  */
 struct evsql;
 
 /**
- * Opaque transaction handle
+ * @struct evsql_trans
+ *
+ * Opaque transaction handle returned by evsql_trans() and used for the \ref evsql_query_ functions
+ *
+ * @see \ref evsql_trans_
  */
 struct evsql_trans;
 
 /**
- * Opaque query handle
+ * @struct evsql_query
+ *
+ * Opaque query handle returned by the \ref evsql_query_ functions and used for evsql_query_abort()
+ *
+ * @see \ref evsql_query_
  */
 struct evsql_query;
 
 /**
- * Opaque result handle
+ * @struct evsql_result
+ *
+ * Opaque result handle received by evsql_query_cb(), and used with the \ref evsql_result_ functions
+ *
+ * @see evsql_query_cb()
+ * @see \ref evsql_result_
  */
 struct evsql_result;
 
@@ -301,7 +318,6 @@ struct evsql_result_info {
  * Callback definitions
  *
  * @name evsql_*_cb
- *
  * @{
  */
 
@@ -310,10 +326,10 @@ struct evsql_result_info {
  *
  * The query has completed, either succesfully or unsuccesfully.
  *
- * Use the evsql_result_* functions to manipulate the results, and call evsql_result_free (or equivalent) once done.
+ * Use the \ref evsql_result_* functions to manipulate the results, and call evsql_result_free() (or equivalent) once done.
  *
  * @param res The result handle that must be result_free'd after use
- * @param arg The void* passed to evsql_query_*
+ * @param arg The void* passed to \ref evsql_query_*
  *
  * @see evsql_query
  */
@@ -332,7 +348,7 @@ typedef void (*evsql_error_cb)(struct evsql *evsql, void *arg);
 
 /**
  * Callback for handling transaction-level errors. This may be called at any time during a transaction's lifetime,
- * including from within the evsql_query_* functions (but not always).
+ * including from within the \ref evsql_query_* functions (but not always).
  *
  * The transaction is not useable anymore.
  *
@@ -344,7 +360,7 @@ typedef void (*evsql_error_cb)(struct evsql *evsql, void *arg);
 typedef void (*evsql_trans_error_cb)(struct evsql_trans *trans, void *arg);
 
 /**
- * Callback for handling evsql_trans/evsql_query_abort completion. The transaction is ready for use with evsql_query_*.
+ * Callback for handling evsql_trans/evsql_query_abort completion. The transaction is ready for use with \ref evsql_query_*.
  *
  * @param trans the transaction in question
  * @param arg the void* passed to evsql_trans
@@ -370,7 +386,16 @@ typedef void (*evsql_trans_done_cb)(struct evsql_trans *trans, void *arg);
 /**
  * Session functions
  *
- * @name evsql_*
+ * @defgroup evsql_* Session interface
+ * @see evsql.h
+ * @{
+ */
+
+/**
+ * Session creation functions
+ *
+ * @defgroup evsql_new_* Session creation interface
+ * @see evsql.h
  * @{
  */
 
@@ -392,13 +417,14 @@ struct evsql *evsql_new_pq (struct event_base *ev_base, const char *pq_conninfo,
     void *cb_arg
 );
 
+// @}
+
 /**
  * Close a connection. Callbacks for waiting queries will not be run.
  *
  * XXX: not implemented yet.
  *
- * @ingroup evsql_*
- * @param evsql the context handle from evsql_new_*
+ * @param evsql the context handle from \ref evsql_new_*
  */
 void evsql_close (struct evsql *evsql);
 
@@ -407,7 +433,8 @@ void evsql_close (struct evsql *evsql);
 /**
  * Query API
  *
- * @name evsql_query_*
+ * @defgroup evsql_query_* Query interface
+ * @see evsql.h
  * @{
  */
 
@@ -418,15 +445,15 @@ void evsql_close (struct evsql *evsql);
  * transaction's context. Otherwise, the query will be executed without a transaction using an idle connection, or
  * enqueued for later execution.
  *
- * Once the query is complete (got a result, got an error, the connection failed), then the query_cb will be called.
- * The callback can use the evsql_result_* functions to manipulate it.
+ * Once the query is complete (got a result, got an error, the connection failed), then the evsql_query_cb() will be called.
+ * The callback can use the \ref evsql_result_* functions to manipulate it.
  *
  * The returned evsql_query handle can be passed to evsql_query_abort at any point before query_fn being called. 
  *
- * @param evsql the context handle from evsql_new_*
+ * @param evsql the context handle from \ref evsql_new_*
  * @param trans the optional transaction handle from evsql_trans
  * @param command the raw SQL command itself
- * @param query_fn the query_cb to call once the query is complete
+ * @param query_fn the evsql_query_cb() to call once the query is complete
  * @param cb_arg the void* passed to the above
  * @return the evsql_query handle that can be used to abort the query
  */
@@ -435,17 +462,17 @@ struct evsql_query *evsql_query (struct evsql *evsql, struct evsql_trans *trans,
 /**
  * Execute the given SQL query using the list of parameter types/values given via evsql_query_params.
  *
- * Use the EVSQL_PARAMS macros to declare the struct, and the evsql_param_* functions to populate the values.
+ * Use the EVSQL_PARAMS macros to declare the struct, and the \ref evsql_param_* functions to populate the values.
  *
  * See evsql_query for more info about behaviour.
  *
  * XXX: explain SQL param syntax...
  *
- * @param evsql the context handle from evsql_new_*
+ * @param evsql the context handle from \ref evsql_new_*
  * @param trans the optional transaction handle from evsql_trans
  * @param command the SQL command to bind the parameters to
  * @param params the parameter types and values
- * @param query_fn the query_cb to call once the query is complete
+ * @param query_fn the evsql_query_cb() to call once the query is complete
  * @param cb_arg the void* passed to the above
  * @see evsql_query
  */
@@ -460,10 +487,10 @@ struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans 
  *
  * See evsql_query for more info about behaviour.
  *
- * @param evsql the context handle from evsql_new_*
+ * @param evsql the context handle from \ref evsql_new_*
  * @param trans the optional transaction handle from evsql_trans
  * @param query_info the SQL query information
- * @param query_fn the query_cb to call once the query is complete
+ * @param query_fn the evsql_query_cb() to call once the query is complete
  * @param cb_arg the void* passed to the above
  * @see evsql_query
  */
@@ -474,7 +501,7 @@ struct evsql_query *evsql_query_exec (struct evsql *evsql, struct evsql_trans *t
 );
 
 /**
- * Abort a query returned by evsql_query_* that has not yet completed (query_fn has not been called yet).
+ * Abort a query returned by \ref evsql_query_* that has not yet completed (query_fn has not been called yet).
  *
  * The actual query itself may or may not be aborted (and hence may or may not be executed on the server), but query_fn
  * will not be called anymore, and the query will dispose of itself and any results returned.
@@ -501,7 +528,8 @@ void evsql_query_debug (const char *sql, const struct evsql_query_params *params
 /**
  * Transaction API
  *
- * @name evsql_trans_*
+ * @defgroup evsql_trans_* Transaction interface
+ * @see evsql.h
  * @{
  */
 
@@ -511,21 +539,20 @@ void evsql_query_debug (const char *sql, const struct evsql_query_params *params
  * A transaction will be allocated its own connection, and the "BEGIN TRANSACTION ..." query will be sent (use the
  * trans_type argument to specify this). 
  *
- * Once the transaction has been opened, the given trans_ready_cb will be triggered, and the transaction can then
- * be used (see evsql_query_*).
+ * Once the transaction has been opened, the given evsql_trans_ready_cb() will be triggered, and the transaction can then
+ * be used (see \ref evsql_query_*).
  *
  * If, at any point, the transaction-connection fails, any pending query will be forgotten (i.e. the query callback
- * will NOT be called), and the given trans_error_cb will be called. Note that this includes some, but not all,
- * cases where evsql_query_* returns an error.
+ * will NOT be called), and the given evsql_trans_error_cb() will be called. Note that this includes some, but not all,
+ * cases where \ref evsql_query_* returns an error.
  *
- * Once you are done with the transaction, call either evsql_trans_commit or evsql_trans_abort.
+ * Once you are done with the transaction, call either evsql_trans_commit() or evsql_trans_abort().
  *
- * @ingroup evsql_trans_*
- * @param evsql the context handle from evsql_new_*
+ * @param evsql the context handle from \ref evsql_new_*
  * @param type the type of transaction to create
- * @param error_fn the trans_error_cb to call if this transaction fails
- * @param ready_fn the trans_ready_cb to call once this transaction is ready for use
- * @param done_fn the trans_done_cb to call once this transaction has been commmited
+ * @param error_fn the evsql_trans_error_cb() to call if this transaction fails
+ * @param ready_fn the evsql_trans_ready_cb() to call once this transaction is ready for use
+ * @param done_fn the evsql_trans_done_cb() to call once this transaction has been commmited
  * @param cb_arg the void* to pass to the above
  * @return the evsql_trans handle for use with other functions
  */
@@ -559,7 +586,7 @@ int evsql_trans_commit (struct evsql_trans *trans);
  *
  * You cannot abort a COMMIT, calling trans_abort on trans after a call to trans_commit is an error.
  * 
- * Do not call evsql_trans_abort from within evsql_trans_error_cb!
+ * Do not call evsql_trans_abort from within evsql_trans_error_cb()!
  *
  * @param trans the transaction from evsql_trans to abort
  * @see evsql_trans
@@ -569,7 +596,7 @@ void evsql_trans_abort (struct evsql_trans *trans);
 /** 
  * Retrieve the transaction-specific error message from the underlying engine.
  *
- * Intended to be called from trans_error_cb
+ * Intended to be called from evsql_trans_error_cb()
  */
 const char *evsql_trans_error (struct evsql_trans *trans);
 
@@ -580,14 +607,46 @@ const char *evsql_trans_error (struct evsql_trans *trans);
  *
  * These manipulate the value of the given parameter index.
  *
- * @name evsql_param_*
+ * @defgroup evsql_param_* Parameter interface
+ * @see evsql.h
  * @{
  */
+
+/**
+ * Sets the value of the parameter at the given index
+ *
+ * @param params the evsql_query_params struct
+ * @param param the parameter index
+ * @param ptr pointer to the binary data
+ * @param len size of the binary data in bytes
+ * @return zero on success, <0 on error
+ */
 int evsql_param_binary (struct evsql_query_params *params, size_t param, const char *ptr, size_t len);
+
+/** @see evsql_param_binary */
 int evsql_param_string (struct evsql_query_params *params, size_t param, const char *ptr);
+
+/** @see evsql_param_binary */
 int evsql_param_uint16 (struct evsql_query_params *params, size_t param, uint16_t uval);
+
+/** @see evsql_param_binary */
 int evsql_param_uint32 (struct evsql_query_params *params, size_t param, uint32_t uval);
-int evsql_param_null   (struct evsql_query_params *params, size_t param);
+
+/**
+ * Sets the given parameter to NULL
+ *
+ * @param params the evsql_query_params struct
+ * @param param the parameter index
+ * @return zero on success, <0 on error
+ */
+int evsql_param_null (struct evsql_query_params *params, size_t param);
+
+/**
+ * Clears all the parameter values (sets them to NULL)
+ *
+ * @param params the evsql_query_params struct
+ * @return zero on success, <0 on error
+ */
 int evsql_params_clear (struct evsql_query_params *params);
 
 // @}
@@ -595,7 +654,9 @@ int evsql_params_clear (struct evsql_query_params *params);
 /**
  * Result-handling functions
  *
- * @name evsql_result_*
+ * @defgroup evsql_result_* Result interface
+ * @see evsql.h
+ * @see evsql_result
  * @{
  */
 
@@ -605,7 +666,7 @@ int evsql_params_clear (struct evsql_query_params *params);
  * Returns zero if the query was OK, err otherwise. EIO indicates an SQL error, the error message can be retrived
  * using evsql_result_error.
  *
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @return zero on success, EIO on SQL error, positive error code otherwise
  */
 err_t evsql_result_check (struct evsql_result *res);
@@ -624,7 +685,7 @@ err_t evsql_result_check (struct evsql_result *res);
  * Note: currently the iterator state is simply stored in evsql_result, so only one iterator at a time per evsql_result.
  *
  * @param info the metadata to use to handle the result row columns
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @return zero on success, +err on error
  */
 err_t evsql_result_begin (struct evsql_result_info *info, struct evsql_result *res);
@@ -647,7 +708,7 @@ int evsql_result_next (struct evsql_result *res, ...);
  * Note: this does the same thing as evsql_result_free, and works regardless of evsql_result_begin returning
  * succesfully or not.
  *
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @see evsql_result_free
  */
 void evsql_result_end (struct evsql_result *res);
@@ -656,7 +717,7 @@ void evsql_result_end (struct evsql_result *res);
  * Get the error message associated with the result, intended for use after evsql_result_check/begin return an error
  * code.
  * 
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @return a char* containing the NUL-terminated error string. Valid until evsql_result_free is called.
  */
 const char *evsql_result_error (const struct evsql_result *res);
@@ -664,7 +725,7 @@ const char *evsql_result_error (const struct evsql_result *res);
 /**
  * Get the number of data rows returned by the query
  *
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @return the number of rows, >= 0
  */
 size_t evsql_result_rows (const struct evsql_result *res);
@@ -672,7 +733,7 @@ size_t evsql_result_rows (const struct evsql_result *res);
 /**
  * Get the number of columns in the data results from the query
  *
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @return the number of columns. XXX: zero if no data?
  */
 size_t evsql_result_cols (const struct evsql_result *res);
@@ -680,7 +741,7 @@ size_t evsql_result_cols (const struct evsql_result *res);
 /**
  * Get the number of rows affected by an UPDATE/INSERT/etc query.
  *
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @return the number of rows affected, >= 0
  */
 size_t evsql_result_affected (const struct evsql_result *res);
@@ -692,7 +753,7 @@ size_t evsql_result_affected (const struct evsql_result *res);
  *
  * *ptr will point to *size bytes of read-only memory allocated internally.
  *
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @param row the row index to access
  * @param col the column index to access
  * @param ptr where to store a pointer to the read-only field data, free'd upon evsql_result_free
@@ -709,7 +770,7 @@ int evsql_result_binary (const struct evsql_result *res, size_t row, size_t col,
  *
  * *ptr will point to a NUL-terminated string allocated internally.
  *
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @param row the row index to access
  * @param col the column index to access
  * @param ptr where to store a pointer to the read-only field data, free'd upon evsql_result_free
@@ -724,7 +785,7 @@ int evsql_result_string (const struct evsql_result *res, size_t row, size_t col,
  *
  * The given row/col must be within bounds as returned by evsql_result_rows/cols.
  *
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  * @param row the row index to access
  * @param col the column index to access
  * @param uval where to store the decoded value
@@ -732,13 +793,17 @@ int evsql_result_string (const struct evsql_result *res, size_t row, size_t col,
  * @return zero on success, <0 on error
  */
 int evsql_result_uint16 (const struct evsql_result *res, size_t row, size_t col, uint16_t *uval, int nullok);
+
+/** @see evsql_result_uint16 */
 int evsql_result_uint32 (const struct evsql_result *res, size_t row, size_t col, uint32_t *uval, int nullok);
+
+/** @see evsql_result_uint16 */
 int evsql_result_uint64 (const struct evsql_result *res, size_t row, size_t col, uint64_t *uval, int nullok);
 
 /**
- * Every result handle passed to query_cb MUST be released by the user, using this function.
+ * Every result handle passed to evsql_query_cb() MUST be released by the user, using this function.
  *
- * @param res the result handle passed to query_cb
+ * @param res the result handle passed to evsql_query_cb()
  */
 void evsql_result_free (struct evsql_result *res);
 

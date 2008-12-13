@@ -24,7 +24,7 @@ initial connection may not yet be complete.
 
 There is an evsql_close function, but it is currently not implemented.
 
-\ref evsql_
+@see \ref evsql_new_
 
 @section Transactions
 Evsql supports both non-transactional queries and transactional queries. A transaction is allocated its own dedicated
@@ -35,7 +35,7 @@ sending the initial "BEGIN TRANSACTION" query, and provides evsql_trans_commit()
 Note, however, that transactions can only handle one outstanding query at a time, whereas transactionless queries can
 be enqueued by evsql itself.
 
-\ref evsql_trans_
+@see \ref evsql_trans_
 
 @section Querying
 There is a single evsql_query function used for both transactional and non-transactional queries; you can pass NULL
@@ -52,6 +52,8 @@ execution if no idle connections are available.
 evsql_query returns a handle that can be passed to evsql_query_abort to abort the query, ensuring that the callback
 given to evsql_query is not invoked, and any associated resources released.
 
+@see \ref evsql_query_
+
 @section Parametrized Queries
 Evsql also provides functions to send parametrized queries, the behaviour of evsql_query explained above applies as
 well. 
@@ -61,6 +63,18 @@ parameter types and values as arguments.
 
 The second of these is evsql_query_exec, which takes a evsql_query_info struct containing the parametrized SQL command
 and the parameter types, and the parameter values themselves as a list of variable arguments (of the correct type!).
+
+@see \ref evsql_query_
+@see \ref evsql_param_
+
+@section Query Results
+Once a evsql_query completes (sucess or failure, unless the query/transaction is aborted), the query's callback is
+called. It receives a evsql_result handle, which can then be used with the \ref evsql_result_ "result interface" to
+get information about the number of rows returned, access induvidual fields, iterate over the rows, etc. It is
+important to note that the query callback is responsible for releasing the evsql_result using evsql_result_free() (or
+equivalent) once it is done with it.
+
+@see \ref evsql_result_
 
 @section API Reference
 The entire API is defined in the top-level evsql.h header.

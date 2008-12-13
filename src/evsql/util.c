@@ -45,8 +45,10 @@ static const char *evsql_item_val (const struct evsql_item *item) {
 int evsql_params_clear (struct evsql_query_params *params) {
     struct evsql_item *param;
 
-    for (param = params->list; param->info.type; param++) 
+    for (param = params->list; param->info.type; param++) {
         param->bytes = NULL;
+        param->flags.has_value = 0;
+    }
 
     return 0;
 }
