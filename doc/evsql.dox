@@ -2,81 +2,82 @@
 @mainpage evsql
 @author Tero Marttila
 
-@section Introduction
-Evsql is a C-language SQL library designed for use with libevent, and primarily PostgreSQL's libpq.
+@section introduction Introduction
+Evsql is a C-language SQL library designed for use with <a href="http://monkey.org/~provos/libevent/">libevent</a>, 
+and primarily <a href="http://www.postgresql.org/">PostgreSQL</a>'s <a href="http://www.postgresql.org/docs/8.3/static/libpq.html">libpq</a>.
 
 Evsql was born as a result of wanting to use a SQL database from within a libevent application, and discovering
 libpq's asynchronous API. Since the libpq API is somewhat cumbersome to use, I wrote a separate interface that
 drives libpq using libevent and makes writing asynchronous SQL clients a lot easier - plus adding some conveniance
 for parametrized queries and such along the way.
 
-The evsql API doesn't expose the underlying database library's API, although since the only currently existing
+The evsql.h API doesn't expose the underlying database library's API, although since the only currently existing
 implementation is libpq, this should really be thought of as a generically-named PostgreSQL library rather than a
 database-agnostic API...
 
-@section Usage
+@section usage Usage
 Include the top-level evsql.h header, making sure you also have the evpq and lib modules available.
 
-@section Connecting
-Evsql sessions are represented using an opaque struct, called simply evsql. Use the \ref evsql_ evsql_new_ function corresponding to your
-database engine (PostgreSQL -> evsql_new_pq()) to allocate this handle. It is valid for use immediately, although the 
-initial connection may not yet be complete.
+@section connecting Connecting
+Evsql sessions are represented using an opaque struct, called simply evsql. Use the \ref evsql_ "evsql_new_*" function
+corresponding to your database engine (PostgreSQL -> evsql_new_pq()) to allocate this handle. It is valid for use
+immediately, although the initial connection may not yet be complete.
 
-There is an evsql_close function, but it is currently not implemented.
+There is an evsql_close() function, but it is currently not implemented.
 
 @see \ref evsql_new_
 
-@section Transactions
-Evsql supports both non-transactional queries and transactional queries. A transaction is allocated its own dedicated
+@section transactions Transactions
+Evsql supports both non-transactional queries and transactional queries. A evsql_trans is allocated its own dedicated
 connection which it can use for its queries without being interfered by other queries/transactions. Evsql takes care of
 sending the initial "BEGIN TRANSACTION" query, and provides evsql_trans_commit()/evsql_trans_abort() functions to send the
 "COMMIT TRANSACTION" and "ROLLBACK TRANSACTION" queries.
 
-Note, however, that transactions can only handle one outstanding query at a time, whereas transactionless queries can
-be enqueued by evsql itself.
-
+@see evsql_trans()
 @see \ref evsql_trans_
 
-@section Querying
-There is a single evsql_query function used for both transactional and non-transactional queries; you can pass NULL
-as the trans argument.
+@section queries Querying
+There is a single evsql_query() function used for both transactional and non-transactional queries; you can pass NULL
+as the \a trans argument.
 
-The given callback function is invoked once the query has been processed and the result is available, or the query
-failed.
+The given evsql_query_cb() callback function is invoked once the query has been processed and the evsql_result is
+available, or the query failed.
 
 The important distinction between transactional and non-transactional queries is that transactions only support one
-outstanding query at a time, meaning that you must wait for your callback to be invoked before calling evsql_query
+outstanding query at a time, meaning that you must wait for your callback to be invoked before calling evsql_query()
 again for the transaction. Non-transactional queries are sent using an idle connection, and will be enqueued for later
 execution if no idle connections are available.
 
-evsql_query returns a handle that can be passed to evsql_query_abort to abort the query, ensuring that the callback
-given to evsql_query is not invoked, and any associated resources released.
+evsql_query() returns an evsql_query handle that can be passed to evsql_query_abort() to abort the query, ensuring
+that the evsql_query_cb() given to evsql_query() is not invoked, and any associated resources released.
 
+@see evsql_query()
 @see \ref evsql_query_
 
-@section Parametrized Queries
+@section param_queries Parametrized Queries
 Evsql also provides functions to send parametrized queries, the behaviour of evsql_query explained above applies as
 well. 
 
-The first of these is evsql_query_params, which takes the parametrized SQL command and a struct containing the
+The first of these is evsql_query_params(), which takes the parametrized SQL command and a evsql_query_params containing the
 parameter types and values as arguments.
 
-The second of these is evsql_query_exec, which takes a evsql_query_info struct containing the parametrized SQL command
+The second of these is evsql_query_exec(), which takes a evsql_query_info struct containing the parametrized SQL command
 and the parameter types, and the parameter values themselves as a list of variable arguments (of the correct type!).
 
 @see \ref evsql_query_
 @see \ref evsql_param_
 
-@section Query Results
-Once a evsql_query completes (sucess or failure, unless the query/transaction is aborted), the query's callback is
+@section query_results Query Results
+Once a evsql_query completes (sucess or failure, unless the query/transaction is aborted), the query's evsql_query_cb() is
 called. It receives a evsql_result handle, which can then be used with the \ref evsql_result_ "result interface" to
 get information about the number of rows returned, access induvidual fields, iterate over the rows, etc. It is
 important to note that the query callback is responsible for releasing the evsql_result using evsql_result_free() (or
 equivalent) once it is done with it.
 
+@see evsql_query_cb
 @see \ref evsql_result_
 
 @section API Reference
-The entire API is defined in the top-level evsql.h header.
+The entire API is defined in the top-level evsql.h header, divided into various groups.
 
 */
