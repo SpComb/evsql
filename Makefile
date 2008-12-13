@@ -84,3 +84,11 @@ obj/%.o : src/%.c
 bin/% : obj/%.o
 	$(CC) $(LDFLAGS) $+ $(LOADLIBES) $(LDLIBS) -o $@
 
+# documentation
+DOXYGEN_PATH = /usr/bin/doxygen
+DOXYGEN_CONF_PATH = doc/doxygen.conf
+DOXYGEN_OUTPUT_FILE = doc/html/index.html
+
+docs :
+	${DOXYGEN_PATH} ${DOXYGEN_CONF_PATH}
+

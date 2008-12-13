@@ -258,6 +258,9 @@ static void _evsql_pump (struct evsql *evsql, struct evsql_conn *conn) {
     
     // look for waiting queries
     while ((query = TAILQ_FIRST(&evsql->query_queue)) != NULL) {
+        // zero err
+        err = 0;
+
         // dequeue
         TAILQ_REMOVE(&evsql->query_queue, query, entry);
         

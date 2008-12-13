@@ -4,3 +4,4 @@ type: re
 ^obj/
 ^build/deps/
 \.[^/]+.sw[op]$
+^doc/html$
