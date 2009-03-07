@@ -2,11 +2,7 @@
 #define LIB_ERROR_H
 
 #include "log.h"
-
-/*
- * err_t is always positive
- */
-typedef unsigned int err_t;
+#include "err.h"
 
 #define ERROR(...) do { err_func(__func__, __VA_ARGS__); goto error; } while (0)
 #define PERROR(...) do { perr_func(__func__, __VA_ARGS__); goto error; } while (0)

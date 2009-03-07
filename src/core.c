@@ -63,12 +63,7 @@ static int _evsql_query_exec (struct evsql_conn *conn, struct evsql_query *query
     return err;
 }
 
-/*
- * Free the query and related resources, doesn't trigger any callbacks or remove from any queues.
- *
- * The command should already be taken care of (NULL).
- */
-static void _evsql_query_free (struct evsql_query *query) {
+void _evsql_query_free (struct evsql_query *query) {
     if (!query)
         return;
         
@@ -89,13 +84,17 @@ static void _evsql_query_free (struct evsql_query *query) {
  *
  * The query has been aborted, it will simply be freed
  */
-static void _evsql_query_done (struct evsql_query *query, const struct evsql_result_info *res) {
+static void _evsql_query_done (struct evsql_query *query, struct evsql_result *res) {
     if (res) {
         if (query->cb_fn)
             // call the callback
             query->cb_fn(res, query->cb_arg);
-        else
+        else {
             WARNING("supressing cb_fn because query was aborted");
+            
+            // free the results
+            evsql_result_free(res);
+        }
     }
 
     // free
@@ -105,7 +104,7 @@ static void _evsql_query_done (struct evsql_query *query, const struct evsql_res
 /*
  * XXX:
  * /
-static void _evsql_destroy (struct evsql *evsql, const struct evsql_result_info *res) {
+static void _evsql_destroy (struct evsql *evsql, const struct evsql_result *res) {
     struct evsql_query *query;
     
     // clear the queue
@@ -184,11 +183,10 @@ static void _evsql_trans_release (struct evsql_trans *trans) {
  * NOTE: Only for *TRANSACTIONLESS* queries.
  */
 static void _evsql_query_fail (struct evsql* evsql, struct evsql_query *query) {
-    struct evsql_result_info res; ZINIT(res);
+    struct evsql_result res; ZINIT(res);
     
     // set up the result_info
     res.evsql = evsql;
-    res.trans = NULL;
     res.error = 1;
     
     // finish off the query
@@ -260,6 +258,9 @@ static void _evsql_pump (struct evsql *evsql, struct evsql_conn *conn) {
     
     // look for waiting queries
     while ((query = TAILQ_FIRST(&evsql->query_queue)) != NULL) {
+        // zero err
+        err = 0;
+
         // dequeue
         TAILQ_REMOVE(&evsql->query_queue, query, entry);
         
@@ -303,23 +304,23 @@ static void _evsql_pump (struct evsql *evsql, struct evsql_conn *conn) {
 /*
  * Callback for a trans's 'BEGIN' query, which means the transaction is now ready for use.
  */
-static void _evsql_trans_ready (const struct evsql_result_info *res, void *arg) {
-    (void) arg;
+static void _evsql_trans_ready (struct evsql_result *res, void *arg) {
+    struct evsql_trans *trans = arg;
 
-    assert(res->trans);
+    assert(trans != NULL);
 
     // check for errors
     if (res->error)
         ERROR("transaction 'BEGIN' failed: %s", evsql_result_error(res));
     
     // transaction is now ready for use
-    res->trans->ready_fn(res->trans, res->trans->cb_arg);
+    trans->ready_fn(trans, trans->cb_arg);
     
     // good
     return;
 
 error:
-    _evsql_trans_fail(res->trans);
+    _evsql_trans_fail(trans);
 }
 
 /*
@@ -364,7 +365,7 @@ static int _evsql_trans_conn_ready (struct evsql *evsql, struct evsql_trans *tra
         ERROR("trans_sql overflow: %d >= %d", ret, EVSQL_QUERY_BEGIN_BUF);
     
     // execute the query
-    if (evsql_query(evsql, trans, trans_sql, _evsql_trans_ready, NULL) == NULL)
+    if (evsql_query(evsql, trans, trans_sql, _evsql_trans_ready, trans) == NULL)
         ERROR("evsql_query");
     
     // success
@@ -403,14 +404,14 @@ static void _evsql_evpq_result (struct evpq_conn *_conn, PGresult *result, void 
     assert(query != NULL);
 
     // if we get multiple results, only return the first one
-    if (query->result.evpq) {
+    if (query->result.pq) {
         WARNING("[evsql] evpq query returned multiple results, discarding previous one");
         
-        PQclear(query->result.evpq); query->result.evpq = NULL;
+        PQclear(query->result.pq); query->result.pq = NULL;
     }
     
     // remember the result
-    query->result.evpq = result;
+    query->result.pq = result;
 }
 
 /*
@@ -419,28 +420,27 @@ static void _evsql_evpq_result (struct evpq_conn *_conn, PGresult *result, void 
 static void _evsql_evpq_done (struct evpq_conn *_conn, void *arg) {
     struct evsql_conn *conn = arg;
     struct evsql_query *query = conn->query;
-    struct evsql_result_info res; ZINIT(res);
+    struct evsql_result res; ZINIT(res);
     
     assert(query != NULL);
     
     // set up the result_info
     res.evsql = conn->evsql;
-    res.trans = conn->trans;
+    res.result = query->result;
     
-    if (query->result.evpq == NULL) {
+    if (query->result.pq == NULL) {
         // if a query didn't return any results (bug?), warn and fail the query
         WARNING("[evsql] evpq query didn't return any results");
 
         res.error = 1;
     
-    } else if (strcmp(PQresultErrorMessage(query->result.evpq), "") != 0) {
+    } else if (strcmp(PQresultErrorMessage(query->result.pq), "") != 0) {
         // the query failed with some error
         res.error = 1;
-        res.result.pq = query->result.evpq;
 
     } else {
+        // the query succeeded \o/
         res.error = 0;
-        res.result.pq = query->result.evpq;
 
     }
 
@@ -731,9 +731,9 @@ error:
 }
 
 /*
- * Validate and allocate the basic stuff for a new query.
+ * Internal query functions
  */
-static struct evsql_query *_evsql_query_new (struct evsql *evsql, struct evsql_trans *trans, evsql_query_cb query_fn, void *cb_arg) {
+struct evsql_query *_evsql_query_new (struct evsql *evsql, struct evsql_trans *trans, evsql_query_cb query_fn, void *cb_arg) {
     struct evsql_query *query = NULL;
     
     // if it's part of a trans, then make sure the trans is idle
@@ -755,13 +755,7 @@ error:
     return NULL;
 }
 
-/*
- * Handle a new query.
- *
- * For transactions this will associate the query and then execute it, otherwise this will either find an idle
- * connection and send the query, or enqueue it.
- */
-static int _evsql_query_enqueue (struct evsql *evsql, struct evsql_trans *trans, struct evsql_query *query, const char *command) {
+int _evsql_query_enqueue (struct evsql *evsql, struct evsql_trans *trans, struct evsql_query *query, const char *command) {
     // transaction queries are handled differently
     if (trans) {
         // it's an in-transaction query
@@ -818,127 +812,25 @@ error:
     return -1;
 }
 
-struct evsql_query *evsql_query (struct evsql *evsql, struct evsql_trans *trans, const char *command, evsql_query_cb query_fn, void *cb_arg) {
-    struct evsql_query *query = NULL;
-    
-    // alloc new query
-    if ((query = _evsql_query_new(evsql, trans, query_fn, cb_arg)) == NULL)
-        goto error;
-    
-    // just execute the command string directly
-    if (_evsql_query_enqueue(evsql, trans, query, command))
-        goto error;
 
-    // ok
-    return query;
-
-error:
-    _evsql_query_free(query);
-
-    return NULL;
-}
-
-struct evsql_query *evsql_query_params (struct evsql *evsql, struct evsql_trans *trans, const char *command, const struct evsql_query_params *params, evsql_query_cb query_fn, void *cb_arg) {
-    struct evsql_query *query = NULL;
-    const struct evsql_query_param *param;
-    int idx;
-    
-    // alloc new query
-    if ((query = _evsql_query_new(evsql, trans, query_fn, cb_arg)) == NULL)
-        goto error;
-
-    // count the params
-    for (param = params->list; param->type; param++) 
-        query->params.count++;
-
-    // allocate the vertical storage for the parameters
-    if (0
-        
-        ||  !(query->params.types    = calloc(query->params.count, sizeof(Oid)))
-        ||  !(query->params.values   = calloc(query->params.count, sizeof(char *)))
-        ||  !(query->params.lengths  = calloc(query->params.count, sizeof(int)))
-        ||  !(query->params.formats  = calloc(query->params.count, sizeof(int)))
-    )
-        ERROR("calloc");
-
-    // transform
-    for (param = params->list, idx = 0; param->type; param++, idx++) {
-        // `set for NULLs, otherwise not
-        query->params.types[idx] = param->data_raw ? 0 : EVSQL_PQ_ARBITRARY_TYPE_OID;
-        
-        // values
-        query->params.values[idx] = param->data_raw;
-
-        // lengths
-        query->params.lengths[idx] = param->length;
-
-        // formats, binary if length is nonzero, but text for NULLs
-        query->params.formats[idx] = param->length && param->data_raw ? 1 : 0;
-    }
-
-    // result format
-    switch (params->result_fmt) {
-        case EVSQL_FMT_TEXT:
-            query->params.result_format = 0; break;
-
-        case EVSQL_FMT_BINARY:
-            query->params.result_format = 1; break;
-
-        default:
-            FATAL("params.result_fmt: %d", params->result_fmt);
-    }
-
-    // execute it
-    if (_evsql_query_enqueue(evsql, trans, query, command))
-        goto error;
-
-#ifdef DEBUG_ENABLED
-    // debug it?
-    DEBUG("evsql.%p: enqueued query=%p on trans=%p", evsql, query, trans);
-    evsql_query_debug(command, params);
-#endif /* DEBUG_ENABLED */
-
-    // ok
-    return query;
-
-error:
-    _evsql_query_free(query);
-    
-    return NULL;
-}
-
-void evsql_query_abort (struct evsql_trans *trans, struct evsql_query *query) {
-    assert(query);
-
-    if (trans) {
-        // must be the right query
-        assert(trans->query == query);
-    }
-
-    // just strip the callback and wait for it to complete as normal
-    query->cb_fn = NULL;
-}
-
-void _evsql_trans_commit_res (const struct evsql_result_info *res, void *arg) {
-    (void) arg;
-
-    assert(res->trans);
+void _evsql_trans_commit_res (struct evsql_result *res, void *arg) {
+    struct evsql_trans *trans = arg;
 
     // check for errors
     if (res->error)
         ERROR("transaction 'COMMIT' failed: %s", evsql_result_error(res));
     
     // transaction is now done
-    res->trans->done_fn(res->trans, res->trans->cb_arg);
+    trans->done_fn(trans, trans->cb_arg);
     
     // release it
-    _evsql_trans_release(res->trans);
+    _evsql_trans_release(trans);
 
     // success
     return;
 
 error:
-    _evsql_trans_fail(res->trans);
+    _evsql_trans_fail(trans);
 }
 
 int evsql_trans_commit (struct evsql_trans *trans) {
@@ -948,7 +840,7 @@ int evsql_trans_commit (struct evsql_trans *trans) {
         ERROR("cannot COMMIT because transaction is still busy");
     
     // query
-    if (evsql_query(trans->evsql, trans, sql, _evsql_trans_commit_res, NULL) == NULL)
+    if (evsql_query(trans->evsql, trans, sql, _evsql_trans_commit_res, trans) == NULL)
         goto error;
     
     // mark it as commited in case someone wants to abort it
@@ -961,37 +853,35 @@ error:
     return -1;
 }
 
-void _evsql_trans_rollback_res (const struct evsql_result_info *res, void *arg) {
-    (void) arg;
-
-    assert(res->trans);
+void _evsql_trans_rollback_res (struct evsql_result *res, void *arg) {
+    struct evsql_trans *trans = arg;
 
     // fail the connection on errors
     if (res->error)
         ERROR("transaction 'ROLLBACK' failed: %s", evsql_result_error(res));
 
     // release it
-    _evsql_trans_release(res->trans);
+    _evsql_trans_release(trans);
 
     // success
     return;
 
 error:
     // fail the connection too, errors are supressed
-    _evsql_trans_fail(res->trans);
+    _evsql_trans_fail(trans);
 }
 
 /*
  * Used as the ready_fn callback in case of abort, otherwise directly
  */
-void _evsql_trans_rollback (struct evsql_trans *trans, void *unused) {
+void _evsql_trans_rollback (struct evsql_trans *trans, void *arg) {
     static const char *sql = "ROLLBACK TRANSACTION";
 
-    (void) unused;
+    (void) arg;
 
     // query
-    if (evsql_query(trans->evsql, trans, sql, _evsql_trans_rollback_res, NULL) == NULL) {
-        // fail the transaction/connection
+    if (evsql_query(trans->evsql, trans, sql, _evsql_trans_rollback_res, trans) == NULL) {
+        // fail the transaction/connection, errors are supressed
         _evsql_trans_fail(trans);
     }
 
@@ -1010,7 +900,7 @@ void evsql_trans_abort (struct evsql_trans *trans) {
         // gah, some query is running
         WARNING("aborting pending query");
         
-        // prepare to rollback once complete
+        // prepare to rollback once complete by hijacking ready_fn
         trans->ready_fn = _evsql_trans_rollback;
         
         // abort

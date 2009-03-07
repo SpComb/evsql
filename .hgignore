@@ -2,3 +2,4 @@ type: re
 
 ^build
 \.[^/]+.sw[op]$
+^doc/(\w+/)?html$
