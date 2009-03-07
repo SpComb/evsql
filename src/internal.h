@@ -9,8 +9,8 @@
 
 #include <event2/event.h>
 
-#include "../evsql.h"
-#include "../evpq.h"
+#include "evsql.h"
+#include "evpq.h"
 
 /*
  * The engine type

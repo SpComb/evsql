@@ -1,9 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include "evsql.h"
-#include "../lib/log.h"
-#include "../lib/misc.h"
+#include "internal.h"
+#include "lib/log.h"
+#include "lib/misc.h"
 
 #define _PARAM_TYPE_CASE(typenam) case EVSQL_PARAM_ ## typenam: return #typenam
 

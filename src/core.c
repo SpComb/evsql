@@ -3,10 +3,10 @@
 #include <assert.h>
 #include <string.h>
 
-#include "evsql.h"
-#include "../lib/log.h"
-#include "../lib/error.h"
-#include "../lib/misc.h"
+#include "internal.h"
+#include "lib/log.h"
+#include "lib/error.h"
+#include "lib/misc.h"
 
 /*
  * A couple function prototypes
