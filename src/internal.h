@@ -9,7 +9,7 @@
 
 #include <event2/event.h>
 
-#include "evsql.h"
+#include "include/evsql.h"
 #include "evpq.h"
 
 /*
