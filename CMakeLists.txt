@@ -9,6 +9,7 @@ set(CMAKE_MODULE_PATH "${evsql_SOURCE_DIR}/cmake/Modules/")
 
 # dependancies
 find_package(LibEvent REQUIRED)
+find_package(LibPQ REQUIRED)
 
 # add the src subdir
 add_subdirectory (src)

@@ -25,7 +25,7 @@ void _generic_err_exit (int flags, const char *func, int err, const char *fmt, .
         __attribute__ ((format (printf, 4, 5)))
         __attribute__ ((noreturn));
 
-static inline void debug_dummy (int dummy, ...) { /* no-op */ }
+static inline void debug_dummy (int dummy, ...) { (void) dummy; /* no-op */ }
 
 enum _debug_level {
     DEBUG_FATAL,

@@ -31,8 +31,9 @@ void query_start (struct event_base *base, struct evsql *db) {
     static struct event ev;
     struct timeval tv = { 5, 0 };
 
-    evperiodic_assign(&ev, base, &tv, &query_timer, db);
-    event_add(&ev, &tv);
+//  XXX: disabled as evperiod_assign has gone missing
+//    evperiodic_assign(&ev, base, &tv, &query_timer, db);
+//    event_add(&ev, &tv);
 
     INFO("[evsql_test.timer_start] started timer");
 }
@@ -275,5 +276,7 @@ error :
     if (ev_base)
         event_base_free(ev_base);
     
+    // XXX: err
+    return 0;    
 }
 

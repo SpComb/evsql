@@ -12,13 +12,11 @@ include (LibFindMacros)
 # include dir
 find_path (LibEvent_INCLUDE_DIR
     NAMES "event2/event.h"
-    PATHS "$ENV{LIBEVENT_PREFIX}/include"
 )
 
 # library
 find_library (LibEvent_LIBRARY
     NAMES "event"
-    PATHS "$ENV{LIBEVENT_PREFIX}/lib"
 )
 
 # set the external vars
