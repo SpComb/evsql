@@ -1,3 +1,7 @@
+# dependancies
+find_package (LibEvent REQUIRED)
+find_package (LibPQ REQUIRED)
+
 # add our include path
 include_directories (${LibEvent_INCLUDE_DIRS})
 
@@ -10,6 +14,7 @@ set (EVSQL_SOURCES core.c util.c)
 set (EVSQL_SOURCES lib/log.c evpq.c core.c query.c result.c util.c)
 set (EVSQL_LIBRARIES ${LibEvent_LIBRARIES} ${LibPQ_LIBRARIES})
 
+# compiler flags
 set (CFLAGS "-Wall -Wextra")
 
 # add our library
@@ -18,7 +23,6 @@ add_library (evsql ${EVSQL_SOURCES})
 # set target attributes
 target_link_libraries (evsql ${EVSQL_LIBRARIES})
 set_target_properties (evsql PROPERTIES
-    COMPILE_FLAGS   ${CFLAGS}
     FRAMEWORK       True
     PUBLIC_HEADER   include/evsql.h
 )
@@ -33,7 +37,9 @@ install (TARGETS evsql
 # test stuff
 add_executable (evsql_test EXCLUDE_FROM_ALL lib/log.c lib/signals.c evsql_test.c)
 target_link_libraries (evsql_test evsql)
-set_target_properties (evsql_test PROPERTIES
+
+# global target properties
+set_target_properties (evsql evsql_test PROPERTIES
     COMPILE_FLAGS   ${CFLAGS}
 )
 
