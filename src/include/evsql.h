@@ -39,13 +39,9 @@
 #include <event2/event.h>
 
 /**
- * XXX: err_t
+ * Type for error return codes
  */
-#ifndef LIB_ERR_H
-#define LIB_ERR_H
-#include <errno.h>
-typedef unsigned int err_t;
-#endif
+typedef unsigned int evsql_err_t;
 
 /**
  * @struct evsql
@@ -161,7 +157,7 @@ struct evsql_item_info {
     /** Various flags */
     struct evsql_item_flags {
         /** The value may be NULL @see evsql_result_next */
-        bool null_ok : 1;
+        bool null_ok;
     } flags;
 };
 
@@ -213,7 +209,7 @@ struct evsql_item {
         /**
          * The item has a value stored in `value`
          */
-        bool has_value : 1;
+        bool has_value;
     } flags;
 };
 
@@ -288,14 +284,15 @@ struct evsql_result_info {
  * @see struct evsql_item_info
  * @see enum evsql_item_type
  */
-#define EVSQL_TYPE(typenam)                     { EVSQL_FMT_BINARY, EVSQL_TYPE_ ## typenam  }
+#define EVSQL_TYPE(typenam)                     { EVSQL_FMT_BINARY, EVSQL_TYPE_ ## typenam, { false } }
+#define EVSQL_TYPE_NULL(typenam)                { EVSQL_FMT_BINARY, EVSQL_TYPE_ ## typenam, { true } }
 
 /**
  * End marker for a `struct evsql_item_info` array.
  *
  * @see struct evsql_item_info
  */
-#define EVSQL_TYPE_END                          { EVSQL_FMT_BINARY, EVSQL_TYPE_INVALID      }
+#define EVSQL_TYPE_END                          EVSQL_TYPE(INVALID)
 
 /**
  * Initializer block for an evsql_query_params struct
@@ -671,7 +668,7 @@ int evsql_params_clear (struct evsql_query_params *params);
  * @param res the result handle passed to evsql_query_cb()
  * @return zero on success, EIO on SQL error, positive error code otherwise
  */
-err_t evsql_result_check (struct evsql_result *res);
+evsql_err_t evsql_result_check (struct evsql_result *res);
 
 /**
  * The iterator-based interface results interface.
@@ -690,7 +687,7 @@ err_t evsql_result_check (struct evsql_result *res);
  * @param res the result handle passed to evsql_query_cb()
  * @return zero on success, +err on error
  */
-err_t evsql_result_begin (struct evsql_result_info *info, struct evsql_result *res);
+evsql_err_t evsql_result_begin (struct evsql_result_info *info, struct evsql_result *res);
 
 /**
  * Reads the next result row from the result prepared using evsql_result_begin. Stores the field values into to given

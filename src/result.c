@@ -86,12 +86,12 @@ error:
     return -1;
 }
 
-err_t evsql_result_check (struct evsql_result *res) {
+evsql_err_t evsql_result_check (struct evsql_result *res) {
     // so simple...
     return res->error ? EIO : 0;
 }
 
-err_t evsql_result_begin (struct evsql_result_info *info, struct evsql_result *res) {
+evsql_err_t evsql_result_begin (struct evsql_result_info *info, struct evsql_result *res) {
     struct evsql_item_info *col;
     size_t cols = 0, nrows;
     err_t err;

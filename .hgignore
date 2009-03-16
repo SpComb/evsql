@@ -1,5 +1,5 @@
 type: re
 
 ^build
+^doc/html
 \.[^/]+.sw[op]$
-^doc/(\w+/)?html$
