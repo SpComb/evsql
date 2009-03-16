@@ -93,7 +93,6 @@ struct evsql_trans {
 
     // our current query
     struct evsql_query *query;
-
 };
 
 /*

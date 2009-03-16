@@ -86,10 +86,11 @@ void _evsql_query_free (struct evsql_query *query) {
  */
 static void _evsql_query_done (struct evsql_query *query, struct evsql_result *res) {
     if (res) {
-        if (query->cb_fn)
+        if (query->cb_fn) {
             // call the callback
             query->cb_fn(res, query->cb_arg);
-        else {
+
+        } else {
             WARNING("supressing cb_fn because query was aborted");
             
             // free the results
@@ -155,6 +156,7 @@ static void _evsql_conn_release (struct evsql_conn *conn) {
     LIST_REMOVE(conn, entry);
     
     // catch deadlocks
+    // XXX: still just assert?
     assert(!LIST_EMPTY(&conn->evsql->conn_list) || TAILQ_EMPTY(&conn->evsql->query_queue));
 
     // free
@@ -570,7 +572,7 @@ struct evsql *evsql_new_pq (struct event_base *ev_base, const char *pq_conninfo,
     return evsql;
 
 error:
-    // XXX: more complicated than this?
+    // there's no other state yet
     free(evsql); 
 
     return NULL;
@@ -911,5 +913,55 @@ void evsql_trans_abort (struct evsql_trans *trans) {
         _evsql_trans_rollback(trans, NULL);
 
     }
+}
+
+void evsql_destroy (struct evsql *evsql) {
+    struct evsql_query *query;
+    struct evsql_conn *conn;
+
+    // kill off all queued queries
+    while ((query = TAILQ_FIRST(&evsql->query_queue)) != NULL) {
+        // just free it, command first
+        free(query->command); query->command = NULL;
+        _evsql_query_free(query);
+    }
+    
+    // kill off all connections
+    while ((conn = LIST_FIRST(&evsql->conn_list)) != NULL) {
+        // kill off the query
+        if (conn->query) {
+            free(query->command); query->command = NULL;
+            _evsql_query_free(query);
+
+            conn->query = NULL;
+        }
+
+        // kill off the transaction
+        if (conn->trans) {
+            conn->trans->query = NULL;
+            _evsql_trans_release(conn->trans);
+        }
+
+        // kill it off
+        _evsql_conn_release(conn);
+    }
+
+    // then free the evsql itself
+    free(evsql);
+}
+
+void _evsql_destroy_handler (int fd, short what, void *arg)
+{
+    struct evsql *evsql = arg;
+
+    evsql_destroy(evsql);
+}
+
+evsql_err_t evsql_destroy_next (struct evsql *evsql)
+{
+    struct timeval tv = {0, 0};
+
+    // schedule a one-time event
+    return event_base_once(evsql->ev_base, 0, EV_TIMEOUT, &_evsql_destroy_handler, evsql, &tv);
 }
 

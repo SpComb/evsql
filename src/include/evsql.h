@@ -415,16 +415,25 @@ struct evsql *evsql_new_pq (struct event_base *ev_base, const char *pq_conninfo,
     void *cb_arg
 );
 
-// @}
-
 /**
- * Close a connection. Callbacks for waiting queries will not be run.
+ * Close the evsql handle. IMPORTANT: There are severe restrictions on the use of this function. It must *NOT* be
+ * called from any evsql_*_cb callback, or the program will probably crash after the callback returns.
  *
- * XXX: not implemented yet.
+ * Currently, the evsql handle can only be free'd if the entire evsql is idle, so this will silently abort any
+ * pending queries and transactions, which may lead to nasty things.
+ *
+ * As a workaround to the callback-issue, you can call evsql_destroy from the next event loop iteration, which is
+ * what evsql_destroy_next does for you.
  *
  * @param evsql the context handle from \ref evsql_new_
  */
-void evsql_close (struct evsql *evsql);
+void evsql_destroy (struct evsql *evsql);
+
+/**
+ * Call evsql_destroy in the next event loop iteration. If scheduling this fails, we return -1 (not a meaningful error
+ * code, but nonzero).
+ */
+evsql_err_t evsql_destroy_next (struct evsql *evsql);
 
 // @}
 

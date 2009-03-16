@@ -255,4 +255,3 @@ void evsql_result_free (struct evsql_result *res) {
     }
 }
 
-
