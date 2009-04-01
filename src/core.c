@@ -74,6 +74,7 @@ void _evsql_query_free (struct evsql_query *query) {
     free(query->params.values);
     free(query->params.lengths);
     free(query->params.formats);
+    free(query->params.item_vals);
 
     // free the query itself
     free(query);
