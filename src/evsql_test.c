@@ -8,7 +8,7 @@
 #include <event2/event_struct.h>
 #include <assert.h>
 
-#define CONNINFO_DEFAULT "dbname=dbfs port=5433"
+#define CONNINFO_DEFAULT ""
 
 struct evsql_test_ctx {
     struct evsql *db;
