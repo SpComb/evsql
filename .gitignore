@@ -1,0 +1,21 @@
+.*.swo
+.*.swp
+
+# cmake
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+
+# build
+src/evsql_test
+src/*.a
+src/*.so
+
+# doc
+README.html
+doc/doxygen.conf
+doc/html/
+
+# install
+install_manifest.txt
