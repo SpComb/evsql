@@ -1,5 +1,9 @@
 # evsql
 
+Non-blocking SQL API for use with [libevent](http://monkey.org/~provos/libevent/).
+
+Currently only includes support for [PostgreSQL libpq](http://www.postgresql.org/docs/8.3/static/libpq.html), so consider this more of a generically named libpq wrapper, rather than a truly generic SQL API.
+
 ## Dependencies
 
 ### APT
