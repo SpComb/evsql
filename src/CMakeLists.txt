@@ -3,7 +3,7 @@ find_package (LibEvent REQUIRED)
 find_package (LibPQ REQUIRED)
 
 # add our include path
-include_directories (${LibEvent_INCLUDE_DIRS})
+include_directories ("include")
 
 # define our source code modules
 set (LIB_SOURCES "lib/log.c")
